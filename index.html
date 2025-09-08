@@ -3,66 +3,73 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>VOR Rehab — WebGazer integration (Calibración externa)</title>
+  <title>RV - Rehabilitación VOR (WebGazer + MediaPipe) — Demo</title>
   <style>
-    :root{
-      --bg:#071029; --panel:#0f1724; --accent:#3bd371;
-    }
-    html,body{height:100%;margin:0;background:linear-gradient(180deg,#071029,#0b1020);font-family:Inter,Roboto,system-ui;color:#e6eef8}
+    :root{ --bg:#0b1020; --panel:#0f1724; --accent:#3bd371; --glass: rgba(255,255,255,0.03); color-scheme:dark;}
+    html,body{height:100%;margin:0;font-family:Inter,Roboto,system-ui,sans-serif;background:linear-gradient(180deg,#071029,#0b1020);color:#e6eef8}
     #app{display:flex;height:100vh;gap:12px;padding:12px;box-sizing:border-box}
     #left{flex:1;position:relative;border-radius:12px;overflow:hidden;background:var(--panel);box-shadow:0 6px 30px rgba(0,0,0,0.6)}
-    canvas{width:100%;height:100%;display:block;background:#04101b}
-    #hud{position:absolute;left:12px;top:12px;z-index:40;background:rgba(255,255,255,0.03);padding:10px;border-radius:10px;backdrop-filter:blur(6px)}
-    #controls{width:420px;padding:12px;border-radius:12px;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.02));box-shadow:0 6px 18px rgba(0,0,0,0.6)}
-    button, select{display:inline-block;margin:6px 6px 6px 0;padding:8px 10px;border-radius:8px;border:none;background:#0b2340;color:#bfe7c8;cursor:pointer}
+    canvas{width:100%;height:100%;display:block;background:#000}
+    #hud{position:absolute;left:12px;top:12px;z-index:30;background:var(--glass);padding:10px;border-radius:10px;backdrop-filter:blur(6px)}
+    #controls{width:380px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+    button,select{display:inline-block;margin:6px 6px 6px 0;padding:8px 10px;border-radius:8px;border:none;background:#0b2340;color:#bfe7c8;cursor:pointer}
     .small{font-size:13px;opacity:0.9}
     .status{margin-top:8px;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);font-size:13px}
-    #logArea{max-height:200px;overflow:auto;font-size:12px;background:rgba(255,255,255,0.02);padding:8px;margin-top:8px;border-radius:8px}
+    #calPoints{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+    .cp{width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center;color:#fff;cursor:pointer}
+    #logArea{max-height:220px;overflow:auto;font-size:12px;background:rgba(255,255,255,0.02);padding:8px;margin-top:8px;border-radius:8px}
+    footer{margin-top:10px;font-size:12px;opacity:0.8}
     .bigbtn{padding:10px 14px;font-weight:700;background:#0c2b4a}
-    label{display:inline-flex;align-items:center;gap:8px}
+    .on{background:linear-gradient(90deg,#4ad27b,#1b7bff);color:#032}
   </style>
 </head>
 <body>
   <div id="app">
     <div id="left">
-      <canvas id="scene" width="960" height="600"></canvas>
+      <canvas id="scene"></canvas>
+
       <div id="hud">
-        <div><strong>VOR Rehab — WebGazer</strong></div>
-        <div class="small">WebGazer status: <span id="wgStatus">detenido</span></div>
-        <div class="status small">Gaze: <span id="gazePos">-</span> | Error: <span id="gazeErr">-</span></div>
-        <div class="status small">Ejercicio: <span id="exerciseLabel">ninguno</span></div>
+        <div><strong>VOR Rehab — WebGazer + MediaPipe</strong></div>
+        <div class="small">Estado cámara: <span id="camStatus">detenida</span></div>
+        <div class="status">Gaze: <span id="gazePos">-</span> | Error: <span id="gazeError">-</span></div>
+        <div class="status">Head vel: <span id="headVel">0</span> px/s | Eye vel: <span id="eyeVel">0</span> px/s</div>
+        <div style="margin-top:6px" class="small">Mirror: <span id="mirrorState">off</span></div>
       </div>
     </div>
 
     <div id="controls">
       <div><strong>Controles</strong></div>
       <div style="margin-top:8px;">
-        <button id="startWG" class="bigbtn">Iniciar WebGazer</button>
-        <button id="stopWG">Detener WebGazer</button>
-        <label style="float:right"><input type="checkbox" id="mirrorToggle"> Espejar vista</label>
+        <button id="startCam" class="bigbtn">Iniciar cámara</button>
+        <button id="stopCam">Detener cámara</button>
+        <button id="toggleMirror">Alternar Mirror</button>
       </div>
 
-      <div style="margin-top:12px;">
-        <strong>Calibración</strong>
-        <div class="small">Usa la herramienta de calibración oficial (abre en otra pestaña). Recomendado: 9 puntos.</div>
+      <div style="margin-top:10px;">
+        <strong>Calibración (WebGazer)</strong>
+        <div class="small">Usamos WebGazer para calibración. Puedes abrir el demo de calibración del autor para referencia.</div>
+        <div style="margin-top:6px"><button id="openWgDemo">Abrir demo calibración (webgazer)</button></div>
+
+        <div id="calPoints" title="Haz click en cada punto: fixa el punto y haz click."></div>
         <div style="margin-top:8px;">
-          <button id="openCalib">Abrir WebGazer Calibración</button>
-          <button id="useSavedModel">Usar modelo guardado (si existe)</button>
+          <button id="startCal">Iniciar calibración</button>
+          <button id="finishCal">Terminar (guardar)</button>
+          <button id="clearCal">Limpiar calibración</button>
         </div>
-        <div class="status small">Nota: la calibración del demo guarda datos en local; si usás la demo y guardás, esta instancia intentará usar esos datos.</div>
       </div>
 
       <div style="margin-top:12px;">
         <strong>Ejercicios</strong>
-        <div style="margin-top:8px;">
-          <button id="exercise1">Ejercicio 1: Estabilización</button>
+        <div style="margin-top:6px;">
+          <button id="exercise1">Ejercicio 1: Estabilización (cabeza rítmica)</button>
           <button id="exercise2">Ejercicio 2: Objetivo móvil</button>
           <button id="stopExercise">Detener ejercicio</button>
         </div>
       </div>
 
-      <div style="margin-top:12px;">
+      <div style="margin-top:10px;">
         <strong>Logs</strong>
+        <div class="small">Descarga CSV con registros.</div>
         <div style="margin-top:8px;">
           <button id="downloadLog">Descargar CSV</button>
           <button id="clearLog">Limpiar log</button>
@@ -70,255 +77,430 @@
         <div id="logArea"></div>
       </div>
 
-      <footer style="margin-top:10px;font-size:12px;opacity:0.85">
-        Tecnologías: WebGazer.js (usa modelos + media-pipeline internamente), Canvas2D. Calibración externa: webgazer.cs.brown.edu calibration demo.
+      <footer>
+        <div><strong>Tecnologías:</strong> WebGazer.js (calibración/gaze), MediaPipe FaceMesh (head pose), Canvas2D.</div>
+        <div style="margin-top:6px">Nota: WebGazer trabaja en el cliente y entrena un modelo de regresión a partir de clicks / calibración. Más info en la web oficial. </div>
       </footer>
     </div>
   </div>
 
-  <!-- WebGazer script (oficial) -->
+  <!-- === LIBS === -->
+  <!-- 1) WebGazer (ejecutable desde el dominio oficial). WebGazer expone webgazer.setGazeListener(), webgazer.calibratePoint(), webgazer.begin(), etc. -->
   <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
+  <!-- 2) MediaPipe FaceMesh (usado sólo para estimar "head center" y velocidad) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
   <script>
-  // ---------- CONFIG & STATE ----------
+  /**************************************************************************
+   * VERSIÓN: WebGazer + MediaPipe FaceMesh
+   * Cambios principales:
+   * - Usa WebGazer para la predicción de mirada y para la calibración (calibratePoint)
+   * - Añade toggle para espejado (mirror) y aplica la transformación en dibujo y en coordenadas
+   * - Mantiene MediaPipe sólo para estimar posición del centro de la cara (head center/vel)
+   *
+   * Fuentes / referencia WebGazer:
+   * - Página oficial / demo: https://webgazer.cs.brown.edu/ (demo calibración). :contentReference[oaicite:2]{index=2}
+   * - API: webgazer.setGazeListener(...), webgazer.calibratePoint(x,y), webgazer.begin() / pause() / end(). :contentReference[oaicite:3]{index=3}
+   **************************************************************************/
+
+  // ---------- Configuración canvas / variables ----------
+  const videoWidth = 640, videoHeight = 480;
   const canvas = document.getElementById('scene');
+  canvas.width = videoWidth;
+  canvas.height = videoHeight;
   const ctx = canvas.getContext('2d');
-  const wgStatusEl = document.getElementById('wgStatus');
+
+  // UI refs
+  const startCamBtn = document.getElementById('startCam');
+  const stopCamBtn = document.getElementById('stopCam');
+  const camStatus = document.getElementById('camStatus');
   const gazePosEl = document.getElementById('gazePos');
-  const gazeErrEl = document.getElementById('gazeErr');
-  const exerciseLabel = document.getElementById('exerciseLabel');
-  const mirrorToggle = document.getElementById('mirrorToggle');
+  const gazeErrorEl = document.getElementById('gazeError');
+  const headVelEl = document.getElementById('headVel');
+  const eyeVelEl = document.getElementById('eyeVel');
+  const logArea = document.getElementById('logArea');
+  const mirrorStateEl = document.getElementById('mirrorState');
 
-  let mirrored = false;
-  mirrorToggle.addEventListener('change', ()=> mirrored = mirrorToggle.checked);
+  // control buttons
+  document.getElementById('openWgDemo').addEventListener('click', ()=> window.open('https://webgazer.cs.brown.edu/calibration.html?#','_blank'));
+  document.getElementById('toggleMirror').addEventListener('click', ()=> toggleMirror());
+  document.getElementById('startCam').addEventListener('click', startCamera);
+  document.getElementById('stopCam').addEventListener('click', stopCamera);
 
-  // gaze state updated by webgazer listener
-  let latestGaze = null; // {x,y,elapsed}
-  let wgRunning = false;
-  let log = [];
-  let currentExercise = null;
-  let exerciseState = {};
+  // calibración / puntos
+  const calContainer = document.getElementById('calPoints');
+  document.getElementById('startCal').addEventListener('click', ()=> { initCalibrationUI(); alert('Fija cada punto en pantalla y haz click en el botón del punto para registrar la calibración (WebGazer).'); });
+  document.getElementById('finishCal').addEventListener('click', ()=> { alert('Finalizado: WebGazer seguirá entrenando con los puntos registrados. Prueba la predicción.'); });
+  document.getElementById('clearCal').addEventListener('click', ()=> { webgazer.clearData(); initCalibrationUI(); });
 
-  // origin point (virtual eye) for pointer: approx bottom-center of canvas (you can adjust)
-  function eyeOrigin(){
-    return { x: canvas.width * 0.5, y: canvas.height - 70 };
-  }
-
-  // ---------- Start / Stop WebGazer ----------
-  document.getElementById('startWG').addEventListener('click', async ()=>{
-    try{
-      // basic config: show prediction points false (we draw our own), persist model across sessions
-      webgazer.setRegression('ridge') // default; options exist
-             .setGazeListener(function(data, elapsedTime) {
-               if(data == null) return;
-               latestGaze = { x: data.x, y: data.y, t: Date.now(), elapsed: elapsedTime };
-             })
-             .showPredictionPoints(false)
-             .saveDataAcrossSessions(true);
-      await webgazer.begin();
-      // optionally hide default video overlays (webgazer adds video element + canvas to body). hide them to keep UI clean
-      webgazer.showVideo(false);
-      webgazer.showFaceOverlay(false);
-      webgazer.showFaceFeedbackBox(false);
-      wgRunning = true; wgStatusEl.textContent = 'activo';
-      console.log('WebGazer started');
-    }catch(e){
-      alert('No se pudo iniciar WebGazer: ' + e.message);
-      console.error(e);
-    }
-  });
-
-  document.getElementById('stopWG').addEventListener('click', ()=>{
-    try{
-      webgazer.end(); // stops and removes video canvas
-    }catch(e){}
-    wgRunning = false; wgStatusEl.textContent = 'detenido';
-    latestGaze = null;
-  });
-
-  // Open external calibration demo in new tab (user calibrates there)
-  document.getElementById('openCalib').addEventListener('click', ()=>{
-    window.open('https://webgazer.cs.brown.edu/calibration.html?#', '_blank');
-  });
-
-  // Use saved model (if demo saved to local storage) - approach: webgazer.begin() + it will auto load saved data if saveDataAcrossSessions was true.
-  document.getElementById('useSavedModel').addEventListener('click', async ()=>{
-    if(!wgRunning){
-      alert('Inicia WebGazer primero (Iniciar WebGazer).');
-      return;
-    }
-    // In current WebGazer API begin() will load saved data if available. We can also notify user.
-    alert('WebGazer intentará usar datos guardados en el navegador (si existen). Si calibraste en la demo en esta misma máquina/navegador, deberían aplicarse.');
-  });
-
-  // ---------- Logging & CSV ----------
-  function pushLog(entry){
-    // ensure gaze coords and err exist (numbers)
-    if(!('gazeX' in entry)) entry.gazeX = Number.isFinite(entry.gazeX)?entry.gazeX:-1;
-    if(!('gazeY' in entry)) entry.gazeY = Number.isFinite(entry.gazeY)?entry.gazeY:-1;
-    if(!('err' in entry)) entry.err = Number.isFinite(entry.err)?entry.err:-1;
-    log.push(entry);
-    const la = document.getElementById('logArea');
-    const line = `${new Date(entry.t).toISOString()} | tgt:${entry.tgtX?.toFixed(1)||'-'},${entry.tgtY?.toFixed(1)||'-'} | gaze:${entry.gazeX.toFixed(1)},${entry.gazeY.toFixed(1)} | err:${entry.err.toFixed(1)} | success:${entry.success?1:0}`;
-    const div = document.createElement('div'); div.textContent = line;
-    la.prepend(div);
-    if(la.childElementCount>200) la.removeChild(la.lastChild);
-  }
-
-  document.getElementById('downloadLog').addEventListener('click', ()=>{
-    if(log.length === 0){ alert('No hay datos para descargar'); return; }
-    const header = 'timestamp,tgtX,tgtY,gazeX,gazeY,err,headV,eyeV,success\n';
-    const rows = log.map(r =>
-      `${new Date(r.t).toISOString()},${r.tgtX||''},${r.tgtY||''},${r.gazeX||''},${r.gazeY||''},${r.err||''},${r.headV||''},${r.eyeV||''},${r.success?1:0}`
-    ).join('\n');
-    const blob = new Blob([header + rows], {type:'text/csv'}), url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = 'vor_rehab_webgazer_log.csv'; a.click(); URL.revokeObjectURL(url);
-  });
-
-  document.getElementById('clearLog').addEventListener('click', ()=>{ log = []; document.getElementById('logArea').innerHTML = ''; });
-
-  // ---------- Exercises control ----------
+  // exercises
   document.getElementById('exercise1').addEventListener('click', ()=> startExercise('stabilize'));
   document.getElementById('exercise2').addEventListener('click', ()=> startExercise('moving'));
-  document.getElementById('stopExercise').addEventListener('click', ()=> stopExercise());
+  document.getElementById('stopExercise').addEventListener('click', stopExercise);
+
+  // logging
+  document.getElementById('downloadLog').addEventListener('click', downloadLog);
+  document.getElementById('clearLog').addEventListener('click', ()=>{ log=[]; logArea.innerHTML=''; });
+
+  // mirror flag (false = normal, true = mirrored)
+  let mirror = false;
+  function toggleMirror(){
+    mirror = !mirror;
+    mirrorStateEl.textContent = mirror ? 'on' : 'off';
+    // attempt to flip the webgazer video feed if present
+    const wgVideo = document.getElementById('webgazerVideoFeed');
+    if(wgVideo) wgVideo.style.transform = mirror ? 'scaleX(-1)' : 'scaleX(1)';
+  }
+
+  // ---------- WebGazer: inizialización y listener ----------
+  // webgazer exposes global object "webgazer" once script loaded.
+  // We'll begin webgazer when user inicia cámara.
+  let lastGaze = null; // {x,y,t}
+  function setupWebGazer(){
+    if(!window.webgazer) {
+      console.warn('WebGazer no está cargado. Revisar script src.');
+      return;
+    }
+    // hide WebGazer's default prediction points (we draw our own)
+    try{ if(webgazer.showPredictionPoints) webgazer.showPredictionPoints(false); } catch(e){}
+    // Attach listener: recibe datos {x,y} en coordenadas de pantalla (px)
+    webgazer.setGazeListener(function(data, elapsedTime) {
+      if(!data) return;
+      // data.x / data.y son coordenadas en viewport (px)
+      lastGaze = { x: data.x, y: data.y, t: performance.now() };
+      // Si hemos activado mirror, mirrorizamos aquí para usar gaze coherente con escena
+      if(mirror){
+        lastGaze.x = canvas.width - lastGaze.x;
+      }
+    }).begin(); // inicia la recolección / predicción
+  }
+
+  // calibración UI: genera los 9 puntos; al hacer click en cada punto llamamos a webgazer.calibratePoint(x,y)
+  function initCalibrationUI(){
+    calContainer.innerHTML='';
+    const positions = [
+      [0.1,0.1],[0.5,0.1],[0.9,0.1],
+      [0.1,0.5],[0.5,0.5],[0.9,0.5],
+      [0.1,0.9],[0.5,0.9],[0.9,0.9]
+    ];
+    positions.forEach((p, i) => {
+      const btn = document.createElement('div');
+      btn.className='cp';
+      btn.textContent = (i+1);
+      btn.onclick = ()=>{
+        const screenX = p[0] * canvas.width;
+        const screenY = p[1] * canvas.height;
+        // Si mirror está encendido, calibramos en coordenada "no-mirrored" que WebGazer espera.
+        // WebGazer entiende coordenadas de pantalla; si el video está espejado, debemos pasarle el
+        // punto real en pantalla (no invertido), pero como invertimos gaze al recibirlo, aquí usamos la pantalla normal:
+        // -> Para consistencia: llamamos a calibratePoint con la coordenada visible por el usuario.
+        const px = screenX;
+        const py = screenY;
+        if(window.webgazer && webgazer.calibratePoint){
+          webgazer.calibratePoint(px, py); // registra calibración en WebGazer
+        } else {
+          console.warn('webgazer.calibratePoint no disponible');
+        }
+        btn.classList.add('on');
+      };
+      calContainer.appendChild(btn);
+    });
+  }
+  initCalibrationUI();
+
+  // ---------- MediaPipe FaceMesh (solo para head center/vel) ----------
+  const videoElement = document.createElement('video');
+  videoElement.width = videoWidth;
+  videoElement.height = videoHeight;
+  videoElement.autoplay = true;
+  videoElement.muted = true;
+  videoElement.playsInline = true;
+
+  const faceMesh = new FaceMesh({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+  });
+  faceMesh.setOptions({
+    maxNumFaces: 1,
+    refineLandmarks: true,
+    minDetectionConfidence: 0.6,
+    minTrackingConfidence: 0.5
+  });
+
+  let cameraMP = null;
+  let lastFaceCenter = null;
+  let lastIris = null;
+  let lastTimestamp = null;
+
+  // helper: compute bounding box & center
+  function faceBoxAndCenter(landmarks){
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    for(const p of landmarks){
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    }
+    return {
+      centerX: ((minX+maxX)/2)*canvas.width,
+      centerY: ((minY+maxY)/2)*canvas.height,
+      width: (maxX-minX)*canvas.width,
+      height: (maxY-minY)*canvas.height
+    };
+  }
+
+  // iris indices (MediaPipe)
+  const leftIrisIdx = [468,469,470,471,472];
+  const rightIrisIdx = [473,474,475,476,477];
+  function avgLandmarks(landmarks, idxArray){
+    let sumx=0,sumy=0;
+    for(const i of idxArray){
+      const p = landmarks[i];
+      sumx += p.x; sumy += p.y;
+    }
+    return { x: (sumx/idxArray.length)*canvas.width, y: (sumy/idxArray.length)*canvas.height };
+  }
+
+  // faceMesh callback (invocado cada frame por MediaPipe Camera util)
+  faceMesh.onResults(onResults);
+
+  // ---------- Start / Stop camera ----------
+  function startCamera(){
+    // start MediaPipe camera for head tracking/drawing
+    if(cameraMP) return;
+    navigator.mediaDevices.getUserMedia({ video: { width:{ ideal: videoWidth }, height:{ ideal: videoHeight } }, audio:false })
+      .then(stream=>{
+        videoElement.srcObject = stream;
+        camStatus.textContent = 'iniciada';
+        // start MediaPipe camera (this will call faceMesh.send for each frame)
+        cameraMP = new Camera(videoElement, {
+          onFrame: async () => { await faceMesh.send({image: videoElement}); },
+          width: videoWidth,
+          height: videoHeight
+        });
+        cameraMP.start();
+        // start WebGazer (uses its own camera internally, but webgazer.begin() must be called)
+        try {
+          setupWebGazer();
+        } catch(e){ console.warn('Error iniciando WebGazer', e); }
+        // try to apply mirror style to webgazer's video (if created)
+        setTimeout(()=>{ const wgVideo = document.getElementById('webgazerVideoFeed'); if(wgVideo) wgVideo.style.transform = mirror ? 'scaleX(-1)' : 'scaleX(1)'; }, 600);
+      })
+      .catch(err=>{
+        alert('Error al abrir la cámara : ' + err.message);
+      });
+  }
+
+  function stopCamera(){
+    if(cameraMP){ cameraMP.stop(); cameraMP=null; }
+    const s = videoElement.srcObject;
+    if(s) s.getTracks().forEach(t=>t.stop());
+    videoElement.srcObject = null;
+    camStatus.textContent = 'detenida';
+    // stop webgazer predictions (pause or end)
+    try{ if(window.webgazer && webgazer.pause) webgazer.pause(); } catch(e){}
+  }
+
+  // ---------- gaze / head fusion y dibujo principal ----------
+  // Variables de ejercicio y log
+  let currentExercise = null;
+  let exerciseState = {};
+  let log = [];
+
+  // helper logging
+  function pushLog(entry){
+    log.push(entry);
+    const line = `${new Date(entry.t).toISOString()} | tgt:${entry.tgtX.toFixed(1)},${entry.tgtY.toFixed(1)} | gaze:${entry.gazeX.toFixed(1)},${entry.gazeY.toFixed(1)} | err:${entry.err.toFixed(1)} | headV:${entry.headV.toFixed(1)} | eyeV:${entry.eyeV.toFixed(1)}`;
+    const div = document.createElement('div'); div.textContent=line;
+    logArea.prepend(div);
+    if(logArea.childElementCount>200) logArea.removeChild(logArea.lastChild);
+  }
+  function downloadLog(){
+    if(log.length===0){ alert('No hay datos para descargar.'); return; }
+    const header = ["timestamp,tgtX,tgtY,gazeX,gazeY,err,headV,eyeV,success"];
+    const rows = log.map(r=>`${new Date(r.t).toISOString()},${r.tgtX},${r.tgtY},${r.gazeX},${r.gazeY},${r.err},${r.headV},${r.eyeV},${r.success?1:0}`);
+    const blob = new Blob([header.concat(rows).join('\n')], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='vor_rehab_log.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // onResults: invoked by MediaPipe FaceMesh; hacemos dibujo del background (video) y usamos lastGaze (WebGazer) para ejercicios
+  function onResults(results){
+    // --- DIBUJAR VIDEO con mirror opcional ---
+    ctx.save();
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    if(results.image){
+      if(mirror){
+        // flip horizontal drawing
+        ctx.translate(canvas.width,0);
+        ctx.scale(-1,1);
+        ctx.drawImage(results.image, 0,0, canvas.width, canvas.height);
+        // reset transform after draw by restoring
+      } else {
+        ctx.drawImage(results.image, 0,0, canvas.width, canvas.height);
+      }
+    }
+
+    // Si no hay face landmarks, no actualizamos head
+    if(!results.multiFaceLandmarks || results.multiFaceLandmarks.length===0){
+      ctx.restore();
+      return;
+    }
+    const landmarks = results.multiFaceLandmarks[0];
+    // calcular head center y velocidad
+    const faceBox = faceBoxAndCenter(landmarks);
+    // Mirrorar el centro de la cara si la vista está espejada:
+    const faceCenter = { x: mirror ? (canvas.width - faceBox.centerX) : faceBox.centerX, y: faceBox.centerY };
+
+    const leftIris = avgLandmarks(landmarks, leftIrisIdx);
+    const rightIris = avgLandmarks(landmarks, rightIrisIdx);
+    const irisCenterOrig = { x: (leftIris.x + rightIris.x)/2, y: (leftIris.y + rightIris.y)/2 };
+    const irisCenter = { x: mirror ? (canvas.width - irisCenterOrig.x) : irisCenterOrig.x, y: irisCenterOrig.y };
+
+    const now = performance.now();
+    if(!lastTimestamp) lastTimestamp = now;
+    const dt = Math.max(1, now - lastTimestamp) / 1000.0;
+    const headVel = lastFaceCenter ? Math.hypot(faceCenter.x - lastFaceCenter.x, faceCenter.y - lastFaceCenter.y) / dt : 0;
+    const eyeVel = lastIris ? Math.hypot(irisCenter.x - lastIris.x, irisCenter.y - lastIris.y) / dt : 0;
+
+    lastFaceCenter = faceCenter;
+    lastIris = irisCenter;
+    lastTimestamp = now;
+
+    // Obtenemos la predicción de mirada desde WebGazer (lastGaze),
+    // si no existe usamos el centro de la cara (fallback)
+    let gazeX = canvas.width/2, gazeY = canvas.height/2;
+    if(lastGaze && lastGaze.x!=null){
+      // lastGaze.x/y ya fueron mirrorizadas en el listener si mirror==true
+      gazeX = lastGaze.x;
+      gazeY = lastGaze.y;
+    } else {
+      // fallback: estimación simple a partir del iris (NO calibrado)
+      gazeX = irisCenter.x;
+      gazeY = irisCenter.y;
+    }
+
+    // DIBUJAR punto de gaze
+    ctx.beginPath();
+    ctx.arc(gazeX, gazeY, 10, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,0,0.7)';
+    ctx.fill();
+
+    // actualizar HUD
+    gazePosEl.textContent = `${gazeX.toFixed(0)}, ${gazeY.toFixed(0)}`;
+    headVelEl.textContent = headVel.toFixed(1);
+    eyeVelEl.textContent = eyeVel.toFixed(1);
+
+    // dibujar mesh sobrio
+    drawingUtils.drawConnectors(ctx, landmarks, FaceMesh.FACEMESH_TESSELATION, {color:'rgba(255,255,255,0.04)', lineWidth:1});
+    drawingUtils.drawLandmarks(ctx, landmarks, {color:'rgba(255,255,255,0.08)', lineWidth:0.5});
+
+    // Ejercicios (si alguno activo)
+    if(currentExercise === 'stabilize') {
+      runStabilizationExercise({gazeX,gazeY,headVel,eyeVel});
+    } else if(currentExercise === 'moving'){
+      runMovingTargetExercise({gazeX,gazeY,headVel,eyeVel});
+    }
+
+    ctx.restore();
+  }
+
+  // ---------- Ejercicios (idénticos a la versión previa, pero consumen gaze desde WebGazer) ----------
+  function evaluateSuccess(gazeX,gazeY,tgtX,tgtY,allowedPx){
+    const dx = gazeX - tgtX, dy = gazeY - tgtY;
+    const err = Math.hypot(dx,dy);
+    return {err, success: err <= allowedPx};
+  }
 
   function startExercise(name){
-    if(!wgRunning){ if(!confirm('WebGazer no está activo. ¿Iniciar WebGazer ahora?')) return; }
-    currentExercise = name; exerciseLabel.textContent = name;
-    exerciseState = { started: performance.now(), difficulty: 1.0, successBuffer: [] };
-    if(name === 'stabilize') {
+    if(!window.webgazer) {
+      if(!confirm('WebGazer no parece cargado. Continuar sin la calibración WebGazer?')) return;
+    }
+    currentExercise = name;
+    exerciseState = { startedAt: performance.now(), lastAdjust: performance.now(), difficulty: 1.0, successBuffer: [] };
+  }
+  function stopExercise(){ currentExercise = null; exerciseState = {}; }
+
+  function runStabilizationExercise(sensors){
+    const ctx = canvas.getContext('2d');
+    const now = performance.now();
+    if(!exerciseState.tgt){
       exerciseState.tgt = { x: canvas.width*0.5, y: canvas.height*0.45 };
-      exerciseState.allowedPx = 70;
-    } else if(name === 'moving') {
-      exerciseState.tgt = { x: 80, y: canvas.height*0.5 }; exerciseState.dir = 1; exerciseState.speed = 140; exerciseState.allowedPx = 60;
+      exerciseState.lastHead = lastFaceCenter ? {...lastFaceCenter} : {x:0,y:0};
+      exerciseState.allowedPx = 60;
     }
-  }
-  function stopExercise(){ currentExercise = null; exerciseState = {}; exerciseLabel.textContent = 'ninguno'; }
+    const head = lastFaceCenter || {x:canvas.width/2,y:canvas.height/2};
+    const hx = head.x - (exerciseState.lastHead?.x||head.x);
+    const hy = head.y - (exerciseState.lastHead?.y||head.y);
+    const scale = 0.8 * exerciseState.difficulty;
+    exerciseState.tgt.x -= hx * scale;
+    exerciseState.tgt.y -= hy * scale;
+    exerciseState.tgt.x = Math.max(40, Math.min(canvas.width-40, exerciseState.tgt.x));
+    exerciseState.tgt.y = Math.max(40, Math.min(canvas.height-40, exerciseState.tgt.y));
+    exerciseState.lastHead = {...head};
 
-  // ---------- Drawing loop ----------
-  let lastFrame = performance.now();
-  function drawLoop(ts){
-    const dt = (ts - lastFrame)/1000; lastFrame = ts;
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+    // dibujar target
+    ctx.beginPath(); ctx.arc(exerciseState.tgt.x, exerciseState.tgt.y, 18, 0, Math.PI*2); ctx.fillStyle='rgba(30,200,120,0.9)'; ctx.fill();
 
-    // Draw background / HUD minimal
-    ctx.fillStyle = '#04121a'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    const ev = evaluateSuccess(sensors.gazeX, sensors.gazeY, exerciseState.tgt.x, exerciseState.tgt.y, exerciseState.allowedPx);
+    gazeErrorEl.textContent = ev.err.toFixed(1);
+    exerciseState.successBuffer.push(ev.success?1:0);
+    if(exerciseState.successBuffer.length>60) exerciseState.successBuffer.shift();
+    const successRate = exerciseState.successBuffer.reduce((a,b)=>a+b,0)/exerciseState.successBuffer.length;
 
-    // get gaze coords (webgazer returns window coordinates)
-    let gazeX = null, gazeY = null;
-    if(latestGaze && typeof latestGaze.x === 'number' && typeof latestGaze.y === 'number'){
-      // Map screen coords -> canvas coords (canvas may be different scale)
-      // We assume canvas is displayed full in its container; compute bounding client rect mapping
-      const rect = canvas.getBoundingClientRect();
-      // latestGaze.x/y are relative to page; compute canvas-local coords
-      gazeX = (latestGaze.x - rect.left) * (canvas.width / rect.width);
-      gazeY = (latestGaze.y - rect.top) * (canvas.height / rect.height);
-      if(mirrored) gazeX = canvas.width - gazeX;
-      gazePosEl.textContent = `${Math.round(gazeX)}, ${Math.round(gazeY)}`;
-    } else {
-      gazePosEl.textContent = '-';
+    if(now - exerciseState.lastAdjust > 2000){
+      exerciseState.lastAdjust = now;
+      if(successRate > 0.8) exerciseState.difficulty = Math.min(2.5, exerciseState.difficulty * 1.08);
+      else if(successRate < 0.4) exerciseState.difficulty = Math.max(0.5, exerciseState.difficulty * 0.94);
     }
 
-    // Draw target(s)
-    if(currentExercise === 'stabilize' && exerciseState.tgt){
-      // For this simple WebGazer-only version we cannot compute true head velocity (no face mesh),
-      // so the target remains static or we can simulate movement by oscillation if desired.
-      // We'll keep static and rely on gaze accuracy for rehab training.
-      ctx.beginPath(); ctx.fillStyle='rgba(30,200,120,0.95)'; ctx.arc(exerciseState.tgt.x, exerciseState.tgt.y, 18, 0, Math.PI*2); ctx.fill();
-    }
-    if(currentExercise === 'moving' && exerciseState.tgt){
-      // move horizontally
-      exerciseState.tgt.x += (exerciseState.dir||1) * (exerciseState.speed||120) * dt;
-      if(exerciseState.tgt.x < 40){ exerciseState.tgt.x = 40; exerciseState.dir = 1; }
-      if(exerciseState.tgt.x > canvas.width - 40){ exerciseState.tgt.x = canvas.width - 40; exerciseState.dir = -1; }
-      ctx.beginPath(); ctx.fillStyle='rgba(90,170,255,0.95)'; ctx.arc(exerciseState.tgt.x, exerciseState.tgt.y, 16, 0, Math.PI*2); ctx.fill();
-    }
+    if(ev.success){ ctx.strokeStyle='rgba(0,255,120,0.9)'; ctx.lineWidth=4; } 
+    else if(ev.err < exerciseState.allowedPx*1.5){ ctx.strokeStyle='rgba(255,200,0,0.9)'; ctx.lineWidth=3; } 
+    else { ctx.strokeStyle='rgba(255,80,80,0.9)'; ctx.lineWidth=3; }
+    ctx.beginPath(); ctx.arc(exerciseState.tgt.x, exerciseState.tgt.y, 28, 0, Math.PI*2); ctx.stroke();
 
-    // Draw "eye origin" (virtual eye/head) and pointer towards gaze
-    const origin = eyeOrigin();
-    ctx.beginPath(); ctx.fillStyle='rgba(200,200,200,0.95)'; ctx.arc(origin.x, origin.y, 12, 0, Math.PI*2); ctx.fill();
-    ctx.font = '12px monospace'; ctx.fillStyle='#bfe7c8'; ctx.fillText('OJO', origin.x - 18, origin.y + 28);
-
-    if(gazeX !== null){
-      // draw small cursor at gaze
-      ctx.beginPath(); ctx.fillStyle='rgba(255,255,0,0.95)'; ctx.arc(gazeX, gazeY, 10, 0, Math.PI*2); ctx.fill();
-
-      // draw arrow from origin to gaze
-      drawArrow(origin.x, origin.y, gazeX, gazeY);
-
-      // Evaluate success / error if an exercise is active
-      if(currentExercise && exerciseState.tgt){
-        const dx = gazeX - exerciseState.tgt.x, dy = gazeY - exerciseState.tgt.y;
-        const err = Math.hypot(dx, dy);
-        const success = err <= exerciseState.allowedPx;
-        gazeErrEl.textContent = err.toFixed(1);
-
-        // feedback ring
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = success ? 'rgba(0,255,120,0.9)' : (err < exerciseState.allowedPx*1.6 ? 'rgba(255,200,0,0.9)' : 'rgba(255,80,80,0.9)');
-        ctx.beginPath(); ctx.arc(exerciseState.tgt.x, exerciseState.tgt.y, exerciseState.allowedPx/1.2, 0, Math.PI*2); ctx.stroke();
-
-        // push log sample (time-sampled at frame rate)
-        pushLogSample({
-          t: Date.now(),
-          tgtX: exerciseState.tgt.x,
-          tgtY: exerciseState.tgt.y,
-          gazeX: gazeX,
-          gazeY: gazeY,
-          err: err,
-          headV: 0,
-          eyeV: 0,
-          success: success
-        });
-      } else {
-        gazeErrEl.textContent = 'n/a';
-      }
-    } else {
-      gazeErrEl.textContent = '-';
-    }
-
-    requestAnimationFrame(drawLoop);
+    pushLog({ t: Date.now(), tgtX:exerciseState.tgt.x, tgtY:exerciseState.tgt.y, gazeX:sensors.gazeX, gazeY:sensors.gazeY, err:ev.err, headV:sensors.headVel, eyeV:sensors.eyeVel, success:ev.success });
   }
 
-  function drawArrow(x1,y1,x2,y2){
-    const dx = x2-x1, dy = y2-y1;
-    const angle = Math.atan2(dy,dx);
-    const len = Math.hypot(dx,dy);
-    const maxLen = Math.min(len, 380);
-    // line
-    ctx.strokeStyle = 'rgba(255,180,60,0.95)';
-    ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(x1,y1);
-    ctx.lineTo(x1 + Math.cos(angle) * maxLen, y1 + Math.sin(angle) * maxLen);
-    ctx.stroke();
-    // arrowhead
-    const ax = x1 + Math.cos(angle) * maxLen;
-    const ay = y1 + Math.sin(angle) * maxLen;
-    ctx.fillStyle = 'rgba(255,180,60,0.95)';
-    ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(ax - 12*Math.cos(angle - Math.PI/6), ay - 12*Math.sin(angle - Math.PI/6));
-    ctx.lineTo(ax - 12*Math.cos(angle + Math.PI/6), ay - 12*Math.sin(angle + Math.PI/6));
-    ctx.closePath();
-    ctx.fill();
+  function runMovingTargetExercise(sensors){
+    const ctx = canvas.getContext('2d');
+    const now = performance.now();
+    if(!exerciseState.tgt){
+      exerciseState.tgt = { x: 80, y: canvas.height*0.5 };
+      exerciseState.dir = 1; exerciseState.speed = 120; exerciseState.allowedPx = 50;
+    }
+    const dt = Math.max(1, (now - (exerciseState.lastTick||now)))/1000;
+    const sp = exerciseState.speed * (exerciseState.difficulty || 1);
+    exerciseState.tgt.x += exerciseState.dir * sp * dt;
+    if(exerciseState.tgt.x < 40){ exerciseState.tgt.x = 40; exerciseState.dir = 1; }
+    if(exerciseState.tgt.x > canvas.width - 40){ exerciseState.tgt.x = canvas.width - 40; exerciseState.dir = -1; }
+    exerciseState.lastTick = now;
+
+    ctx.beginPath(); ctx.arc(exerciseState.tgt.x, exerciseState.tgt.y, 16, 0, Math.PI*2); ctx.fillStyle='rgba(90,170,255,0.95)'; ctx.fill();
+
+    const ev = evaluateSuccess(sensors.gazeX, sensors.gazeY, exerciseState.tgt.x, exerciseState.tgt.y, exerciseState.allowedPx);
+    gazeErrorEl.textContent = ev.err.toFixed(1);
+    ctx.lineWidth = 3; ctx.strokeStyle = ev.success ? 'rgba(0,255,120,0.9)' : 'rgba(255,80,80,0.9)'; ctx.beginPath(); ctx.arc(exerciseState.tgt.x, exerciseState.tgt.y, 28, 0, Math.PI*2); ctx.stroke();
+
+    exerciseState.successBuffer.push(ev.success?1:0);
+    if(exerciseState.successBuffer.length>80) exerciseState.successBuffer.shift();
+    const srate = exerciseState.successBuffer.reduce((a,b)=>a+b,0)/exerciseState.successBuffer.length;
+    if(now - (exerciseState.lastAdjust||0) > 2000){
+      exerciseState.lastAdjust = now;
+      if(srate > 0.75) exerciseState.difficulty = Math.min(2.0, (exerciseState.difficulty||1)*1.07);
+      else if(srate < 0.35) exerciseState.difficulty = Math.max(0.6, (exerciseState.difficulty||1)*0.95);
+    }
+
+    pushLog({ t: Date.now(), tgtX:exerciseState.tgt.x, tgtY:exerciseState.tgt.y, gazeX:sensors.gazeX, gazeY:sensors.gazeY, err:ev.err, headV:sensors.headVel, eyeV:sensors.eyeV, success:ev.success });
   }
 
-  // pushLogSample collects a sample but avoids flooding identical entries quickly (frame-rate sampling is fine)
-  function pushLogSample(sample){
-    // ensure numbers
-    sample.gazeX = Number(sample.gazeX) || -1;
-    sample.gazeY = Number(sample.gazeY) || -1;
-    sample.err = Number(sample.err) || -1;
-    sample.t = sample.t || Date.now();
-    pushLog(sample);
-  }
+  // limpiar recursos al cerrar
+  window.addEventListener('beforeunload', ()=>{ stopCamera(); try{ if(window.webgazer && webgazer.end) webgazer.end(); }catch(e){} });
 
-  // ---------- Start drawing ----------
-  requestAnimationFrame(drawLoop);
-
-  // ---------- Cleanup on unload ----------
-  window.addEventListener('beforeunload', ()=>{ try{ webgazer.end(); } catch(e){} });
-
+  // Nota: drawingUtils proviene del script de MediaPipe
+  const drawingUtils = window;
   </script>
 </body>
 </html>
