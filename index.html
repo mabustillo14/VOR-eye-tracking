@@ -1,11 +1,591 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VOR con eye-tracking</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RV - Rehabilitación VOR (Eye Tracking via MediaPipe)</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --panel:#0f1724;
+      --accent:#3bd371;
+      --warn:#ffb86b;
+      --bad:#ff5c5c;
+      --glass: rgba(255,255,255,0.03);
+      color-scheme: dark;
+    }
+    html,body { height:100%; margin:0; background:linear-gradient(180deg,#071029,#0b1020); font-family: Inter, Roboto, system-ui, sans-serif; color:#e6eef8;}
+    #app { display:flex; height:100vh; gap:12px; padding:12px; box-sizing:border-box;}
+    #left { flex:1; position:relative; border-radius:12px; overflow:hidden; background:var(--panel); box-shadow: 0 6px 30px rgba(0,0,0,0.6);}
+    canvas { width:100%; height:100%; display:block; }
+    #hud { position:absolute; left:12px; top:12px; z-index:30; background:var(--glass); padding:10px; border-radius:10px; backdrop-filter: blur(6px);}
+    #controls { width:360px; background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02)); border-radius:12px; padding:12px; box-shadow: 0 6px 18px rgba(0,0,0,0.6); }
+    button, select { display:inline-block; margin:6px 6px 6px 0; padding:8px 10px; border-radius:8px; border:none; background:#0b2340; color:#bfe7c8; cursor:pointer;}
+    .small { font-size:13px; opacity:0.9;}
+    .status { margin-top:8px; padding:8px; border-radius:8px; background:rgba(255,255,255,0.02); font-size:13px;}
+    .metric { font-weight:600; color:var(--accent);}
+    #calPoints { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;}
+    .cp { width:42px; height:42px; border-radius:50%; background:rgba(255,255,255,0.04); display:flex; align-items:center; justify-content:center; color:#fff; cursor:pointer;}
+    #logArea{ max-height:220px; overflow:auto; font-size:12px; background:rgba(255,255,255,0.02); padding:8px; margin-top:8px; border-radius:8px;}
+    .kbd { background:rgba(255,255,255,0.03); padding:2px 6px; border-radius:6px; font-family:monospace; }
+    footer { margin-top:10px; font-size:12px; opacity:0.8;}
+    .bigbtn{padding:10px 14px; font-weight:700; background:#0c2b4a;}
+  </style>
 </head>
 <body>
-   
+  <div id="app">
+    <div id="left">
+      <canvas id="scene"></canvas>
+      <div id="hud">
+        <div><strong>VOR Rehab — Eye Tracking (MediaPipe)</strong></div>
+        <div class="small">Estado cámara: <span id="camStatus">apagada</span></div>
+        <div class="status">Gaze: <span id="gazePos">-</span> | Error: <span id="gazeError">-</span></div>
+        <div class="status">Head vel: <span id="headVel">0</span> px/s | Eye vel: <span id="eyeVel">0</span> px/s</div>
+      </div>
+    </div>
+
+    <div id="controls">
+      <div><strong>Controles</strong></div>
+      <div style="margin-top:8px;">
+        <button id="startCam" class="bigbtn">Iniciar cámara</button>
+        <button id="stopCam">Detener cámara</button>
+      </div>
+
+      <div style="margin-top:10px;">
+        <strong>Calibración (tipo WebGazer)</strong>
+        <div class="small">Sigue los puntos con la mirada y haz click en cada uno.</div>
+        <div id="calPoints"></div>
+        <div style="margin-top:8px;">
+          <button id="startCal">Iniciar calibración</button>
+          <button id="finishCal">Terminar y calcular mapa</button>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;">
+        <strong>Ejercicios</strong>
+        <div style="margin-top:6px;">
+          <button id="exercise1">Ejercicio 1: Estabilización (cabeza rítmica)</button>
+          <button id="exercise2">Ejercicio 2: Objetivo móvil</button>
+        </div>
+        <div style="margin-top:8px;">
+          <button id="stopExercise">Detener ejercicio</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <strong>Logs</strong>
+        <div class="small">Guarda registro objetivo para análisis.</div>
+        <div style="margin-top:8px;">
+          <button id="downloadLog">Descargar CSV</button>
+          <button id="clearLog">Limpiar log</button>
+        </div>
+        <div id="logArea"></div>
+      </div>
+
+      <footer>
+        <div><strong>Tecnologías:</strong> MediaPipe FaceMesh, Canvas2D, WebRTC (webcam), JS</div>
+        <div style="margin-top:6px">Limitaciones: precisión aproximada; luz y posición de cámara afectan performance.</div>
+      </footer>
+    </div>
+  </div>
+
+  <!-- MediaPipe (FaceMesh + helpers) via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+  <script>
+  // === CONFIG / variables ===
+  const videoWidth = 640, videoHeight = 480;
+  const canvas = document.getElementById('scene');
+  canvas.width = videoWidth;
+  canvas.height = videoHeight;
+  const ctx = canvas.getContext('2d');
+
+  const startCamBtn = document.getElementById('startCam');
+  const stopCamBtn = document.getElementById('stopCam');
+  const camStatus = document.getElementById('camStatus');
+  const gazePosEl = document.getElementById('gazePos');
+  const gazeErrorEl = document.getElementById('gazeError');
+  const headVelEl = document.getElementById('headVel');
+  const eyeVelEl = document.getElementById('eyeVel');
+  const logArea = document.getElementById('logArea');
+
+  let camera = null;
+  let videoElement = document.createElement('video');
+  videoElement.width = videoWidth;
+  videoElement.height = videoHeight;
+  videoElement.autoplay = true;
+  videoElement.muted = true;
+  videoElement.playsInline = true;
+
+  // MediaPipe FaceMesh
+  const faceMesh = new FaceMesh({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+  });
+  faceMesh.setOptions({
+    maxNumFaces: 1,
+    refineLandmarks: true, // gives iris landmarks
+    minDetectionConfidence: 0.6,
+    minTrackingConfidence: 0.5
+  });
+
+  // Data buffers
+  let lastFaceCenter = null;
+  let lastIris = null;
+  let lastTimestamp = null;
+  let calibrationMode = false;
+  let calibrPoints = [];
+  let calSamples = []; // entries: {norm:[x,y], screen:[x,y]}
+  let affineMap = null; // regression result: maps norm->[x,y] via [A|b]
+
+  let currentExercise = null;
+  let exerciseState = {};
+  let log = [];
+
+  // utility: get bounding box & face center from landmarks
+  function faceBoxAndCenter(landmarks) {
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    for(const p of landmarks){
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    }
+    // convert normalized (0..1) to pixel coords relative to canvas size
+    return {
+      left: minX*canvas.width,
+      top: minY*canvas.height,
+      right: maxX*canvas.width,
+      bottom: maxY*canvas.height,
+      centerX: ((minX+maxX)/2)*canvas.width,
+      centerY: ((minY+maxY)/2)*canvas.height,
+      width: (maxX-minX)*canvas.width,
+      height: (maxY-minY)*canvas.height
+    };
+  }
+
+  // utility: compute iris center (avg of given landmarks indices)
+  // MediaPipe face mesh iris landmark index sets:
+  const leftIrisIdx = [468,469,470,471,472];
+  const rightIrisIdx = [473,474,475,476,477];
+
+  function avgLandmarks(landmarks, idxArray){
+    let sumx=0,sumy=0;
+    for(const i of idxArray){
+      const p = landmarks[i];
+      sumx += p.x;
+      sumy += p.y;
+    }
+    return {x: (sumx/idxArray.length)*canvas.width, y: (sumy/idxArray.length)*canvas.height};
+  }
+
+  // Given iris center and face box, compute normalized vector (normX,normY)
+  function computeNormalizedIris(irisCenter, faceBox){
+    const nx = (irisCenter.x - faceBox.centerX) / (faceBox.width || canvas.width);
+    const ny = (irisCenter.y - faceBox.centerY) / (faceBox.height || canvas.height);
+    return [nx, ny];
+  }
+
+  // Regression (least squares) to fit affine transform: screen = M * [nx, ny, 1]
+  // returns 2x3 matrix
+  function fitAffine(samples){
+    // samples: [{norm:[nx,ny], screen:[sx,sy]}, ...]
+    const N = samples.length;
+    if(N < 3) return null;
+    // Build X (N x 3) and Y (N x 2)
+    const X = [];
+    const Y = [];
+    for(const s of samples){
+      X.push([s.norm[0], s.norm[1], 1]);
+      Y.push([s.screen[0], s.screen[1]]);
+    }
+    // compute (X^T X)^{-1} X^T Y
+    // small linear algebra:
+    function matMul(A,B){
+      const m=A.length, n=A[0].length, p=B[0].length;
+      const C = Array.from({length:m}, ()=>Array(p).fill(0));
+      for(let i=0;i<m;i++) for(let k=0;k<n;k++){
+        for(let j=0;j<p;j++) C[i][j] += A[i][k]*B[k][j];
+      }
+      return C;
+    }
+    function transpose(A){ return A[0].map((_,i)=>A.map(row=>row[i])); }
+    function inv3(A){
+      // invert 3x3
+      const a=A;
+      const m = [
+        [a[0][0],a[0][1],a[0][2]],
+        [a[1][0],a[1][1],a[1][2]],
+        [a[2][0],a[2][1],a[2][2]]
+      ];
+      const det =
+        m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1])
+      - m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0])
+      + m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]);
+      if(Math.abs(det) < 1e-9) return null;
+      const invDet = 1/det;
+      const c = [
+        [
+          (m[1][1]*m[2][2]-m[1][2]*m[2][1])*invDet,
+          (m[0][2]*m[2][1]-m[0][1]*m[2][2])*invDet,
+          (m[0][1]*m[1][2]-m[0][2]*m[1][1])*invDet
+        ],
+        [
+          (m[1][2]*m[2][0]-m[1][0]*m[2][2])*invDet,
+          (m[0][0]*m[2][2]-m[0][2]*m[2][0])*invDet,
+          (m[0][2]*m[1][0]-m[0][0]*m[1][2])*invDet
+        ],
+        [
+          (m[1][0]*m[2][1]-m[1][1]*m[2][0])*invDet,
+          (m[0][1]*m[2][0]-m[0][0]*m[2][1])*invDet,
+          (m[0][0]*m[1][1]-m[0][1]*m[1][0])*invDet
+        ]
+      ];
+      return c;
+    }
+    const Xt = transpose(X);
+    // XtX = 3x3
+    const XtX = matMul(Xt, X);
+    const invXtX = inv3(XtX);
+    if(!invXtX) return null;
+    const XtY = matMul(Xt, Y); // 3x2
+    const A = matMul(invXtX, XtY); // 3x2
+    // return 2x3 for convenience: [ [a00,a01,a02], [a10,a11,a12] ]
+    return [[A[0][0],A[1][0],A[2][0]],[A[0][1],A[1][1],A[2][1]]];
+  }
+
+  function applyAffine(map, norm){
+    // map: 2x3
+    if(!map) return null;
+    const x = map[0][0]*norm[0] + map[0][1]*norm[1] + map[0][2];
+    const y = map[1][0]*norm[0] + map[1][1]*norm[1] + map[1][2];
+    return [x,y];
+  }
+
+  // logging
+  function pushLog(entry){
+    log.push(entry);
+    const line = `${new Date(entry.t).toISOString()} | tgt:${entry.tgtX.toFixed(1)},${entry.tgtY.toFixed(1)} | gaze:${entry.gazeX.toFixed(1)},${entry.gazeY.toFixed(1)} | err:${entry.err.toFixed(1)} | headV:${entry.headV.toFixed(1)} | eyeV:${entry.eyeV.toFixed(1)}`;
+    const div = document.createElement('div'); div.textContent=line;
+    logArea.prepend(div);
+    if(logArea.childElementCount>200) logArea.removeChild(logArea.lastChild);
+  }
+
+  // download CSV
+  document.getElementById('downloadLog').addEventListener('click',()=>{
+    if(log.length===0){ alert('No hay datos para descargar.'); return; }
+    const header = ["timestamp,tgtX,tgtY,gazeX,gazeY,err,headV,eyeV,success"];
+    const rows = log.map(r=>`${new Date(r.t).toISOString()},${r.tgtX},${r.tgtY},${r.gazeX},${r.gazeY},${r.err},${r.headV},${r.eyeV},${r.success?1:0}`);
+    const blob = new Blob([header.concat(rows).join('\n')], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='vor_rehab_log.csv'; a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('clearLog').addEventListener('click',()=>{
+    log = []; logArea.innerHTML='';
+  });
+
+  // Camera start/stop
+  startCamBtn.addEventListener('click', startCamera);
+  stopCamBtn.addEventListener('click', stopCamera);
+
+  function startCamera(){
+    if(camera) return;
+    navigator.mediaDevices.getUserMedia({video: { width: {ideal:videoWidth}, height:{ideal:videoHeight} }, audio:false})
+      .then(stream=>{
+        videoElement.srcObject = stream;
+        camStatus.textContent = 'iniciada';
+        // Use MediaPipe Camera util
+        camera = new Camera(videoElement, {
+          onFrame: async () => { await faceMesh.send({image: videoElement}); },
+          width: videoWidth,
+          height: videoHeight
+        });
+        camera.start();
+      })
+      .catch(err=>{
+        alert('Error al abrir la cámara: ' + err.message);
+      });
+  }
+
+  function stopCamera(){
+    if(camera){
+      camera.stop();
+      camera = null;
+    }
+    const s = videoElement.srcObject;
+    if(s){
+      s.getTracks().forEach(t=>t.stop());
+      videoElement.srcObject = null;
+    }
+    camStatus.textContent = 'detenida';
+  }
+
+  // CALIBRATION UI creation
+  const calContainer = document.getElementById('calPoints');
+  function createCalPointsGrid(){
+    calContainer.innerHTML = '';
+    const positions = [
+      [0.1,0.1],[0.5,0.1],[0.9,0.1],
+      [0.1,0.5],[0.5,0.5],[0.9,0.5],
+      [0.1,0.9],[0.5,0.9],[0.9,0.9]
+    ];
+    let idx=0;
+    for(const p of positions){
+      const btn = document.createElement('div');
+      btn.className='cp';
+      btn.textContent = (++idx);
+      btn.onclick = ()=>{ // on click, capture sample
+        if(!lastIris || !lastFaceCenter) { alert('No hay datos de eye-tracking todavía. Asegúrate de haber iniciado cámara.'); return; }
+        const screenX = p[0]*canvas.width;
+        const screenY = p[1]*canvas.height;
+        const norm = computeNormalizedIris(lastIris, lastFaceCenter);
+        calSamples.push({norm: norm, screen: [screenX, screenY]});
+        btn.style.background = 'linear-gradient(90deg,#4ad27b,#1b7bff)';
+        btn.style.color = '#032';
+      };
+      calContainer.appendChild(btn);
+    }
+  }
+  createCalPointsGrid();
+
+  document.getElementById('startCal').addEventListener('click', ()=>{
+    calibrationMode = true;
+    calSamples = [];
+    // reset UI
+    createCalPointsGrid();
+    alert('Calibración iniciada.\nHaz clic en cada punto del panel de calibración mientras fijas el punto en la pantalla.');
+  });
+
+  document.getElementById('finishCal').addEventListener('click', ()=>{
+    calibrationMode = false;
+    affineMap = fitAffine(calSamples);
+    if(!affineMap) { alert('No se pudo calcular mapa (necesitas al menos 3 puntos no colineales).'); return; }
+    alert('Calibración finalizada. Mapa calculado.');
+  });
+
+  // Exercises control
+  document.getElementById('exercise1').addEventListener('click', ()=>startExercise('stabilize'));
+  document.getElementById('exercise2').addEventListener('click', ()=>startExercise('moving'));
+  document.getElementById('stopExercise').addEventListener('click', stopExercise);
+
+  function startExercise(name){
+    if(!affineMap){ if(!confirm('No hay calibración. Continuar de todas formas? (calibración recomendada)')) return; }
+    currentExercise = name;
+    exerciseState = {
+      startedAt: performance.now(),
+      lastAdjust: performance.now(),
+      difficulty: 1.0, // affects target speed
+      successBuffer: []
+    };
+  }
+  function stopExercise(){ currentExercise = null; exerciseState = {}; }
+
+  // FaceMesh callback
+  faceMesh.onResults(onResults);
+
+  function onResults(results){
+    // draw video background
+    ctx.save();
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    if(results.image){
+      ctx.drawImage(results.image, 0,0, canvas.width, canvas.height);
+    }
+    // if no face
+    if(!results.multiFaceLandmarks || results.multiFaceLandmarks.length===0){
+      ctx.restore();
+      return;
+    }
+    const landmarks = results.multiFaceLandmarks[0];
+    // compute face box and iris centers
+    const faceBox = faceBoxAndCenter(landmarks);
+    const leftIris = avgLandmarks(landmarks, leftIrisIdx);
+    const rightIris = avgLandmarks(landmarks, rightIrisIdx);
+    // average the two irises to reduce noise
+    const irisCenter = { x: (leftIris.x + rightIris.x)/2, y: (leftIris.y + rightIris.y)/2 };
+
+    // compute velocities (px / s)
+    const now = performance.now();
+    if(!lastTimestamp) lastTimestamp = now;
+    const dt = Math.max(1, now - lastTimestamp) / 1000.0;
+    const headCenter = { x: faceBox.centerX, y: faceBox.centerY };
+
+    const headVel = lastFaceCenter ? Math.hypot(headCenter.x-lastFaceCenter.x, headCenter.y-lastFaceCenter.y) / dt : 0;
+    const eyeVel = lastIris ? Math.hypot(irisCenter.x-lastIris.x, irisCenter.y-lastIris.y)/dt : 0;
+
+    lastFaceCenter = headCenter;
+    lastIris = irisCenter;
+    lastTimestamp = now;
+
+    // normalized iris
+    const norm = computeNormalizedIris(irisCenter, faceBox);
+    const gazeScreen = affineMap ? applyAffine(affineMap, norm) : [ faceBox.centerX + norm[0]*faceBox.width, faceBox.centerY + norm[1]*faceBox.height ];
+    // clamp if needed
+    const gazeX = Math.max(0, Math.min(canvas.width, gazeScreen[0]));
+    const gazeY = Math.max(0, Math.min(canvas.height, gazeScreen[1]));
+
+    // display gaze
+    ctx.beginPath();
+    ctx.arc(gazeX, gazeY, 10, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(255,255,0,0.6)';
+    ctx.fill();
+
+    // HUD update
+    gazePosEl.textContent = `${gazeX.toFixed(0)}, ${gazeY.toFixed(0)}`;
+    headVelEl.textContent = headVel.toFixed(1);
+    eyeVelEl.textContent = eyeVel.toFixed(1);
+
+    // Draw face mesh (subtle)
+    drawingUtils.drawConnectors(ctx, landmarks, FaceMesh.FACEMESH_TESSELATION, {color:'rgba(255,255,255,0.06)', lineWidth:1});
+    drawingUtils.drawLandmarks(ctx, landmarks, {color:'rgba(255,255,255,0.12)', lineWidth:0.5});
+
+    // EXERCISE logic & target rendering
+    if(currentExercise === 'stabilize'){
+      runStabilizationExercise({gazeX,gazeY,headVel,eyeVel});
+    } else if(currentExercise === 'moving'){
+      runMovingTargetExercise({gazeX,gazeY,headVel,eyeVel});
+    }
+
+    ctx.restore();
+  }
+
+  // --- Exercise implementations ---
+
+  // Common helper: compute error distance and success boolean by threshold
+  function evaluateSuccess(gazeX, gazeY, tgtX, tgtY, allowedPx){
+    const dx = gazeX - tgtX, dy = gazeY - tgtY;
+    const err = Math.hypot(dx,dy);
+    return {err, success: err <= allowedPx};
+  }
+
+  // Exercise 1: stabilization with head movement.
+  // Target remains (mostly) static in world coordinates; if head moves right, target moves left (opposite) scaled by difficulty.
+  function runStabilizationExercise(sensors){
+    const ctx = canvas.getContext('2d');
+    const now = performance.now();
+    if(!exerciseState.tgt) {
+      // initial target at center
+      exerciseState.tgt = {x: canvas.width*0.5, y: canvas.height*0.45};
+      exerciseState.lastHead = lastFaceCenter ? {...lastFaceCenter} : {x:0,y:0};
+      exerciseState.difficulty = 1.0;
+      exerciseState.allowedPx = 60; // tolerance for success (px)
+    }
+    const head = lastFaceCenter || {x:canvas.width/2, y:canvas.height/2};
+    // compute motion opposite to head delta
+    const hx = head.x - (exerciseState.lastHead?.x||head.x);
+    const hy = head.y - (exerciseState.lastHead?.y||head.y);
+    // move target opposite to head, scaled by difficulty
+    const scale = 0.8 * exerciseState.difficulty;
+    exerciseState.tgt.x -= hx * scale;
+    exerciseState.tgt.y -= hy * scale;
+    // maintain within screen
+    exerciseState.tgt.x = Math.max(40, Math.min(canvas.width-40, exerciseState.tgt.x));
+    exerciseState.tgt.y = Math.max(40, Math.min(canvas.height-40, exerciseState.tgt.y));
+    exerciseState.lastHead = {...head};
+
+    // draw target
+    ctx.beginPath();
+    ctx.arc(exerciseState.tgt.x, exerciseState.tgt.y, 18, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(30,200,120,0.9)';
+    ctx.fill();
+
+    // evaluate success
+    const ev = evaluateSuccess(sensors.gazeX, sensors.gazeY, exerciseState.tgt.x, exerciseState.tgt.y, exerciseState.allowedPx);
+    gazeErrorEl.textContent = ev.err.toFixed(1);
+
+    // push to success buffer
+    exerciseState.successBuffer.push(ev.success ? 1 : 0);
+    if(exerciseState.successBuffer.length > 60) exerciseState.successBuffer.shift();
+    const successRate = exerciseState.successBuffer.reduce((a,b)=>a+b,0)/exerciseState.successBuffer.length;
+
+    // adapt difficulty every 2s
+    if(now - exerciseState.lastAdjust > 2000){
+      exerciseState.lastAdjust = now;
+      if(successRate > 0.8) exerciseState.difficulty = Math.min(2.5, exerciseState.difficulty * 1.08);
+      else if(successRate < 0.4) exerciseState.difficulty = Math.max(0.5, exerciseState.difficulty * 0.94);
+    }
+
+    // UI color feedback
+    if(ev.success){
+      ctx.strokeStyle = 'rgba(0,255,120,0.9)'; ctx.lineWidth=4;
+    } else if(ev.err < exerciseState.allowedPx*1.5){
+      ctx.strokeStyle = 'rgba(255,200,0,0.9)'; ctx.lineWidth=3;
+    } else {
+      ctx.strokeStyle = 'rgba(255,80,80,0.9)'; ctx.lineWidth=3;
+    }
+    ctx.beginPath(); ctx.arc(exerciseState.tgt.x, exerciseState.tgt.y, 28, 0, Math.PI*2); ctx.stroke();
+
+    // log sample
+    pushLog({
+      t: Date.now(),
+      tgtX: exerciseState.tgt.x, tgtY: exerciseState.tgt.y,
+      gazeX: sensors.gazeX, gazeY: sensors.gazeY,
+      err: ev.err, headV: sensors.headVel, eyeV: sensors.eyeVel,
+      success: ev.success
+    });
+  }
+
+  // Exercise 2: moving target
+  function runMovingTargetExercise(sensors){
+    const ctx = canvas.getContext('2d');
+    const now = performance.now();
+    if(!exerciseState.tgt) {
+      exerciseState.tgt = {x: 80, y: canvas.height*0.5};
+      exerciseState.dir = 1;
+      exerciseState.speed = 120; // px/s base speed
+      exerciseState.allowedPx = 50;
+    }
+    // adapt speed by difficulty
+    const sp = exerciseState.speed * (exerciseState.difficulty || 1);
+    // move horizontally bouncing
+    const dt = Math.max(1, (now - (exerciseState.lastTick||now)))/1000;
+    exerciseState.tgt.x += exerciseState.dir * sp * dt;
+    if(exerciseState.tgt.x < 40){ exerciseState.tgt.x = 40; exerciseState.dir = 1; }
+    if(exerciseState.tgt.x > canvas.width - 40){ exerciseState.tgt.x = canvas.width - 40; exerciseState.dir = -1; }
+    exerciseState.lastTick = now;
+
+    // draw target
+    ctx.beginPath();
+    ctx.arc(exerciseState.tgt.x, exerciseState.tgt.y, 16, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(90,170,255,0.95)';
+    ctx.fill();
+
+    // evaluate success
+    const ev = evaluateSuccess(sensors.gazeX, sensors.gazeY, exerciseState.tgt.x, exerciseState.tgt.y, exerciseState.allowedPx);
+    gazeErrorEl.textContent = ev.err.toFixed(1);
+    // feedback ring
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = ev.success ? 'rgba(0,255,120,0.9)' : 'rgba(255,80,80,0.9)';
+    ctx.beginPath(); ctx.arc(exerciseState.tgt.x, exerciseState.tgt.y, 28, 0, Math.PI*2); ctx.stroke();
+
+    // adapt difficulty by last success rate
+    exerciseState.successBuffer.push(ev.success?1:0);
+    if(exerciseState.successBuffer.length>80) exerciseState.successBuffer.shift();
+    const srate = exerciseState.successBuffer.reduce((a,b)=>a+b,0)/exerciseState.successBuffer.length;
+    // every 2s adapt
+    if(now - (exerciseState.lastAdjust||0) > 2000){
+      exerciseState.lastAdjust = now;
+      if(srate > 0.75) exerciseState.difficulty = Math.min(2.0, (exerciseState.difficulty||1)*1.07);
+      else if(srate < 0.35) exerciseState.difficulty = Math.max(0.6, (exerciseState.difficulty||1)*0.95);
+    }
+
+    // log sample
+    pushLog({
+      t: Date.now(),
+      tgtX: exerciseState.tgt.x, tgtY: exerciseState.tgt.y,
+      gazeX: sensors.gazeX, gazeY: sensors.gazeY,
+      err: ev.err, headV: sensors.headVel, eyeV: sensors.eyeVel,
+      success: ev.success
+    });
+  }
+
+  // On unload, attempt to stop camera
+  window.addEventListener('beforeunload', ()=>{ stopCamera(); });
+
+  // Small helper: drawing utils from MediaPipe are available in drawingUtils var
+  const drawingUtils = window;
+  </script>
 </body>
 </html>
