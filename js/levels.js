@@ -1,43 +1,43 @@
-// Level definitions for VOR training
+// Definiciones de niveles para entrenamiento VOR
 const LEVELS = {
   1: {
-    name: "Basic Fixation",
-    description: "Keep your gaze fixed on the center target while slowly moving your head left and right",
+    name: "Fijación Básica",
+    description: "Mantén tu mirada fija en el objetivo central mientras mueves lentamente la cabeza de izquierda a derecha",
+    instruction: "Mira el punto rojo y mueve tu cabeza lentamente sin perder la fijación visual",
     duration: 30000,
     targetPattern: "static",
-    headMovement: "horizontal_slow",
     difficulty: 1
   },
   2: {
-    name: "Horizontal Movement", 
-    description: "Follow the target with your eyes while keeping your head still, then reverse - keep gaze fixed while moving head",
+    name: "Movimiento Horizontal", 
+    description: "Sigue el objetivo con los ojos manteniendo la cabeza quieta, luego invierte - mantén la mirada fija mientras mueves la cabeza",
+    instruction: "Fase 1: Sigue el objetivo con los ojos. Fase 2: Mantén la mirada fija mientras mueves la cabeza",
     duration: 45000,
     targetPattern: "horizontal",
-    headMovement: "horizontal_medium",
     difficulty: 2
   },
   3: {
-    name: "Vertical Movement",
-    description: "Vertical head movements while maintaining gaze fixation on target",
+    name: "Movimiento Vertical",
+    description: "Movimientos verticales de cabeza mientras mantienes la fijación visual en el objetivo",
+    instruction: "Mantén la mirada en el objetivo mientras mueves la cabeza arriba y abajo",
     duration: 45000,
     targetPattern: "vertical", 
-    headMovement: "vertical_medium",
     difficulty: 3
   },
   4: {
-    name: "Diagonal Movement",
-    description: "Diagonal head movements with gaze stabilization",
+    name: "Movimiento Diagonal",
+    description: "Movimientos diagonales de cabeza con estabilización de la mirada",
+    instruction: "Sigue el patrón diagonal manteniendo la coordinación ojo-cabeza",
     duration: 60000,
     targetPattern: "diagonal",
-    headMovement: "diagonal",
     difficulty: 4
   },
   5: {
-    name: "Complex Patterns",
-    description: "Advanced VOR training with unpredictable target and head movement patterns",
+    name: "Patrones Complejos",
+    description: "Entrenamiento VOR avanzado con patrones impredecibles de objetivo y movimiento de cabeza",
+    instruction: "Desafío avanzado: mantén la estabilidad visual con patrones complejos",
     duration: 90000,
     targetPattern: "complex",
-    headMovement: "complex",
     difficulty: 5
   }
 };
@@ -58,6 +58,9 @@ class LevelManager {
     document.querySelectorAll('.level-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelector(`[data-level="${levelNum}"]`).classList.add('active');
     
+    // Enable start button
+    document.getElementById('btnStart').disabled = false;
+    
     this.showLevelInfo();
   }
 
@@ -67,7 +70,7 @@ class LevelManager {
       info.innerHTML = `
         <strong>${this.currentLevel.name}</strong><br>
         ${this.currentLevel.description}<br>
-        <small>Duration: ${this.currentLevel.duration/1000}s | Difficulty: ${this.currentLevel.difficulty}/5</small>
+        <small>Duración: ${this.currentLevel.duration/1000}s | Dificultad: ${this.currentLevel.difficulty}/5</small>
       `;
       info.style.display = 'block';
     } else {
@@ -102,8 +105,8 @@ class LevelManager {
     this.instructionOverlay.className = 'instruction-overlay';
     this.instructionOverlay.innerHTML = `
       <h3>${this.currentLevel.name}</h3>
-      <p>${this.currentLevel.description}</p>
-      <button onclick="levelManager.hideInstructions()">Start Exercise</button>
+      <p>${this.currentLevel.instruction}</p>
+      <button onclick="levelManager.hideInstructions()">Comenzar Ejercicio</button>
     `;
     document.body.appendChild(this.instructionOverlay);
   }
@@ -120,38 +123,44 @@ class LevelManager {
 
     const pattern = this.currentLevel.targetPattern;
     const startTime = performance.now();
+    const duration = this.currentLevel.duration;
+    
+    // Show progress bar
+    this.showProgress();
     
     const animate = () => {
       const elapsed = performance.now() - startTime;
-      const progress = (elapsed % 4000) / 4000; // 4 second cycle
+      const progress = (elapsed % 4000) / 4000;
+      const overallProgress = Math.min(elapsed / duration, 1);
       
-      let x = 50, y = 50; // center position (%)
+      // Update progress bar
+      this.updateProgress(overallProgress);
+      
+      let x = 50, y = 50;
       
       switch (pattern) {
         case 'static':
-          // Target stays in center
           break;
         case 'horizontal':
-          x = 50 + 20 * Math.sin(progress * Math.PI * 2);
+          x = 50 + 25 * Math.sin(progress * Math.PI * 2);
           break;
         case 'vertical':
-          y = 50 + 15 * Math.sin(progress * Math.PI * 2);
+          y = 50 + 20 * Math.sin(progress * Math.PI * 2);
           break;
         case 'diagonal':
-          x = 50 + 15 * Math.sin(progress * Math.PI * 2);
-          y = 50 + 15 * Math.cos(progress * Math.PI * 2);
+          x = 50 + 20 * Math.sin(progress * Math.PI * 2);
+          y = 50 + 20 * Math.cos(progress * Math.PI * 2);
           break;
         case 'complex':
-          x = 50 + 20 * Math.sin(progress * Math.PI * 3) + 10 * Math.cos(progress * Math.PI * 5);
-          y = 50 + 15 * Math.cos(progress * Math.PI * 2) + 8 * Math.sin(progress * Math.PI * 7);
+          x = 50 + 25 * Math.sin(progress * Math.PI * 3) + 12 * Math.cos(progress * Math.PI * 5);
+          y = 50 + 20 * Math.cos(progress * Math.PI * 2) + 10 * Math.sin(progress * Math.PI * 7);
           break;
       }
       
       this.targetElement.style.left = x + '%';
       this.targetElement.style.top = y + '%';
       
-      // Continue animation if level is still active
-      if (elapsed < this.currentLevel.duration && STATE.sessionActive) {
+      if (elapsed < duration && STATE.sessionActive) {
         requestAnimationFrame(animate);
       } else if (STATE.sessionActive) {
         this.completeLevel();
@@ -161,19 +170,41 @@ class LevelManager {
     requestAnimationFrame(animate);
   }
 
+  showProgress() {
+    const progressDiv = document.getElementById('progress');
+    progressDiv.innerHTML = `
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-text" id="progressText">0%</div>
+    `;
+    progressDiv.style.display = 'block';
+  }
+  
+  updateProgress(progress) {
+    const fill = document.getElementById('progressFill');
+    const text = document.getElementById('progressText');
+    if (fill && text) {
+      fill.style.width = (progress * 100) + '%';
+      text.textContent = Math.round(progress * 100) + '%';
+    }
+  }
+  
   completeLevel() {
     if (this.targetElement) {
       this.targetElement.remove();
       this.targetElement = null;
     }
     
-    // Show completion message
+    document.getElementById('progress').style.display = 'none';
+    
     const completion = document.createElement('div');
     completion.className = 'instruction-overlay';
     completion.innerHTML = `
-      <h3>Level Complete!</h3>
-      <p>${this.currentLevel.name} finished successfully.</p>
-      <button onclick="this.parentElement.remove()">Continue</button>
+      <h3>¡Nivel Completado!</h3>
+      <p>${this.currentLevel.name} finalizado exitosamente.</p>
+      <p>Los datos han sido registrados para análisis.</p>
+      <button onclick="this.parentElement.remove()">Continuar</button>
     `;
     document.body.appendChild(completion);
   }
@@ -187,6 +218,7 @@ class LevelManager {
       this.instructionOverlay.remove();
       this.instructionOverlay = null;
     }
+    document.getElementById('progress').style.display = 'none';
   }
 }
 

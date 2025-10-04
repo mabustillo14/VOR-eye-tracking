@@ -2,39 +2,39 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>VOR Eye Tracking - Level System</title>
+  <title>Sistema de Entrenamiento VOR</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
   <div id="ui" aria-live="polite">
-    <h2>VOR Training System</h2>
+    <h2>Sistema de Entrenamiento VOR</h2>
     <div id="levelSelector">
-      <h3>Select Level</h3>
-      <button class="level-btn" data-level="1">Level 1: Basic Fixation</button>
-      <button class="level-btn" data-level="2">Level 2: Horizontal Movement</button>
-      <button class="level-btn" data-level="3">Level 3: Vertical Movement</button>
-      <button class="level-btn" data-level="4">Level 4: Diagonal Movement</button>
-      <button class="level-btn" data-level="5">Level 5: Complex Patterns</button>
+      <h3>Seleccionar Nivel</h3>
+      <button class="level-btn" data-level="1">Nivel 1: Fijación Básica</button>
+      <button class="level-btn" data-level="2">Nivel 2: Movimiento Horizontal</button>
+      <button class="level-btn" data-level="3">Nivel 3: Movimiento Vertical</button>
+      <button class="level-btn" data-level="4">Nivel 4: Movimiento Diagonal</button>
+      <button class="level-btn" data-level="5">Nivel 5: Patrones Complejos</button>
     </div>
     
     <div id="controls">
-      <button id="btnCalibrate">Calibrate (9 points)</button>
-      <button id="btnStart">Start Session</button>
-      <button id="btnStop" disabled>Stop Session</button>
-      <button id="btnExport" disabled>Export CSV</button>
+      <button id="btnCalibrate">Calibrar (9 puntos)</button>
+      <button id="btnStart" disabled>Iniciar Ejercicio</button>
+      <button id="btnStop" disabled>Detener</button>
+      <button id="btnExport" disabled>Exportar Datos</button>
     </div>
     
-    <div id="status">Status: <span id="statusText">initializing...</span></div>
+    <div id="status">Estado: <span id="statusText">inicializando...</span></div>
     <div id="levelInfo"></div>
+    <div id="progress"></div>
     <div id="metrics"></div>
-    <a id="downloadLink" href="#" style="display:none">[download CSV]</a>
+    <a id="downloadLink" href="#" style="display:none">[descargar CSV]</a>
   </div>
 
   <div id="calibrationGrid"></div>
   <div id="gameArea"></div>
 
-  <script src="https://d3js.org/d3.v3.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.8.1/localforage.js"></script>
   <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
   

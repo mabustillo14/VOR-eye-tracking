@@ -28,7 +28,7 @@ class VORApp {
     // Set gaze listener
     webgazer.setGazeListener(this.gazeListener.bind(this));
     
-    document.getElementById('statusText').innerText = 'ready to calibrate';
+    document.getElementById('statusText').innerText = 'listo para calibrar';
     this.initialized = true;
   }
 
@@ -62,7 +62,7 @@ class VORApp {
     const whr = webgazer.getVideoPreviewToCameraResolutionRatio();
     
     // Update visualization
-    visualizationManager.updateGazeVisualization(data, fmPositions, whr);
+    visualizationManager.updateGazeVisualization(data);
 
     // Calculate metrics
     const gaze = { x: data.x, y: data.y, t: t };
@@ -110,7 +110,7 @@ class VORApp {
 
     document.getElementById('btnStop').disabled = false;
     document.getElementById('btnStart').disabled = true;
-    document.getElementById('statusText').innerText = 'session active';
+    document.getElementById('statusText').innerText = 'sesión activa';
     document.getElementById('saccCount').innerText = '0';
   }
 
@@ -120,13 +120,13 @@ class VORApp {
     
     document.getElementById('btnStop').disabled = true;
     document.getElementById('btnStart').disabled = false;
-    document.getElementById('statusText').innerText = 'session stopped';
+    document.getElementById('statusText').innerText = 'sesión detenida';
     document.getElementById('btnExport').disabled = STATE.recorded.length === 0;
   }
 
   exportCSV() {
     if (!STATE.recorded || STATE.recorded.length === 0) {
-      return alert('No data to export.');
+      return alert('No hay datos para exportar.');
     }
 
     const header = Object.keys(STATE.recorded[0]);
@@ -141,7 +141,7 @@ class VORApp {
     const link = document.getElementById('downloadLink');
     
     link.href = url;
-    link.download = 'vor_session_' + (new Date()).toISOString().replace(/[:.]/g, '_') + '.csv';
+    link.download = 'datos_vor_' + (new Date()).toISOString().replace(/[:.]/g, '_') + '.csv';
     link.style.display = 'inline-block';
     link.click();
   }

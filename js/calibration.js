@@ -13,7 +13,7 @@ class CalibrationManager {
     grid.innerHTML = '';
     grid.style.display = 'block';
     
-    document.getElementById('statusText').innerText = 'calibrating: click each point and stare for 1.5s';
+    document.getElementById('statusText').innerText = 'calibrando: haz clic en cada punto y mira fijamente por 1.5s';
     
     this.calibrationPoints.forEach((point, i) => {
       const element = this.createCalibrationPoint(point, i);
@@ -50,7 +50,7 @@ class CalibrationManager {
 
   createFinishButton() {
     const button = document.createElement('button');
-    button.innerText = 'Finish Calibration';
+    button.innerText = 'Finalizar Calibración';
     button.style.position = 'absolute';
     button.style.left = '50%';
     button.style.bottom = '6%';
@@ -58,7 +58,7 @@ class CalibrationManager {
     
     button.onclick = () => {
       document.getElementById('calibrationGrid').style.display = 'none';
-      document.getElementById('statusText').innerText = 'calibration completed';
+      document.getElementById('statusText').innerText = 'calibración completada';
     };
     
     return button;

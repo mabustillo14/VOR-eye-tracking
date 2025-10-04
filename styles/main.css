@@ -61,10 +61,38 @@ html, body {
 #levelInfo {
   font-size: 13px;
   margin: 8px 0;
-  padding: 8px;
-  background: rgba(0, 100, 0, 0.2);
-  border-radius: 4px;
+  padding: 12px;
+  background: rgba(0, 100, 0, 0.3);
+  border: 1px solid rgba(0, 150, 0, 0.5);
+  border-radius: 6px;
   display: none;
+}
+
+#progress {
+  margin: 8px 0;
+  display: none;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #333;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #8BC34A);
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #ccc;
+  margin-top: 4px;
+  text-align: center;
 }
 
 #metrics {
@@ -119,23 +147,36 @@ svg {
 
 .target {
   position: absolute;
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   background: radial-gradient(circle, #ff6b6b, #ff4757);
-  border: 3px solid #fff;
+  border: 4px solid #fff;
   transform: translate(-50%, -50%);
-  box-shadow: 0 0 20px rgba(255, 107, 107, 0.6);
+  box-shadow: 0 0 30px rgba(255, 107, 107, 0.8);
+  z-index: 1000;
 }
 
 .target.active {
-  animation: pulse 1s infinite;
+  animation: pulse 1.5s infinite;
 }
 
 @keyframes pulse {
-  0% { transform: translate(-50%, -50%) scale(1); }
-  50% { transform: translate(-50%, -50%) scale(1.1); }
-  100% { transform: translate(-50%, -50%) scale(1); }
+  0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 30px rgba(255, 107, 107, 0.8); }
+  50% { transform: translate(-50%, -50%) scale(1.2); box-shadow: 0 0 40px rgba(255, 107, 107, 1); }
+  100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 30px rgba(255, 107, 107, 0.8); }
+}
+
+.gaze-indicator {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #00ff00;
+  border: 2px solid #fff;
+  transform: translate(-50%, -50%);
+  z-index: 999;
+  box-shadow: 0 0 10px rgba(0, 255, 0, 0.6);
 }
 
 .instruction-overlay {
@@ -143,12 +184,34 @@ svg {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(0, 0, 0, 0.9);
+  background: rgba(0, 0, 0, 0.95);
   color: white;
-  padding: 20px;
-  border-radius: 10px;
+  padding: 30px;
+  border-radius: 15px;
   text-align: center;
   z-index: 400000;
+  border: 2px solid #4CAF50;
+  max-width: 500px;
+}
+
+.instruction-overlay h3 {
+  color: #4CAF50;
+  margin-bottom: 15px;
+}
+
+.instruction-overlay button {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  margin-top: 15px;
+}
+
+.instruction-overlay button:hover {
+  background: #45a049;
 }
 
 #downloadLink {

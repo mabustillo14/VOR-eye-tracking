@@ -7,14 +7,14 @@ class MetricsCalculator {
   initializeMetricsUI() {
     const metricsDiv = document.getElementById('metrics');
     metricsDiv.innerHTML = `
-      <div><strong>Real-time Metrics</strong></div>
-      <div class="small">Head angular vel: <span id="headVel">-</span> °/s</div>
-      <div class="small">Eye (gaze) vel: <span id="eyeVel">-</span> px/s</div>
-      <div class="small">VOR gain (approx): <span id="vorGain">-</span></div>
-      <div class="small">Latency est.: <span id="latency">-</span> ms</div>
-      <div class="small">Fixation stability (RMS): <span id="fixRMS">-</span></div>
-      <div class="small">Saccades counted: <span id="saccCount">0</span></div>
-      <div class="small">Frames recorded: <span id="frames">0</span></div>
+      <div><strong>Métricas en Tiempo Real</strong></div>
+      <div class="small">Vel. angular cabeza: <span id="headVel">-</span> °/s</div>
+      <div class="small">Vel. mirada: <span id="eyeVel">-</span> px/s</div>
+      <div class="small">Ganancia VOR: <span id="vorGain">-</span></div>
+      <div class="small">Latencia est.: <span id="latency">-</span> ms</div>
+      <div class="small">Estabilidad fijación: <span id="fixRMS">-</span> px</div>
+      <div class="small">Sacadas detectadas: <span id="saccCount">0</span></div>
+      <div class="small">Frames registrados: <span id="frames">0</span></div>
     `;
   }
 
@@ -124,17 +124,23 @@ class MetricsCalculator {
   recordData(t, gaze, headAngle, headVel, eyeVel, vorGain) {
     if (STATE.sessionActive) {
       const latSamples = STATE.latencyEstimates.filter(e => e.latencyMs).map(e => e.latencyMs);
+      const avgLatency = latSamples.length > 0 ? latSamples.reduce((a,b) => a+b, 0) / latSamples.length : null;
+      const rmsVal = this.calculateFixationStability(gaze, t);
       
       STATE.recorded.push({
-        t: t,
-        level: STATE.currentLevel,
-        gazeX: gaze.x,
-        gazeY: gaze.y,
-        headAngle: headAngle,
-        headVel: headVel,
-        eyeVel: eyeVel,
-        vorGain: vorGain,
-        latencySamples: latSamples.slice(-5)
+        timestamp: t,
+        nivel: STATE.currentLevel,
+        nombreNivel: LEVELS[STATE.currentLevel]?.name || 'Desconocido',
+        miradaX: Math.round(gaze.x * 100) / 100,
+        miradaY: Math.round(gaze.y * 100) / 100,
+        anguloCabeza: headAngle ? Math.round(headAngle * 100) / 100 : null,
+        velocidadCabeza: Math.round(headVel * 100) / 100,
+        velocidadOjo: Math.round(eyeVel * 100) / 100,
+        gananciaVOR: vorGain ? Math.round(vorGain * 1000) / 1000 : null,
+        latenciaPromedio: avgLatency ? Math.round(avgLatency) : null,
+        estabilidadRMS: rmsVal ? Math.round(rmsVal * 100) / 100 : null,
+        conteoSacadas: STATE.saccCount,
+        sesionActiva: STATE.sessionActive
       });
       
       document.getElementById('btnExport').disabled = false;
