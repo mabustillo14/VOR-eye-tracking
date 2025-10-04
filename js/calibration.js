@@ -94,19 +94,71 @@ class CalibrationManager {
 
   createFinishButton() {
     const button = document.createElement('button');
-    button.innerText = 'Finalizar Calibración';
+    button.innerText = 'Calcular Precisión';
     button.style.position = 'absolute';
     button.style.left = '50%';
     button.style.bottom = '6%';
     button.style.transform = 'translateX(-50%)';
     
-    button.onclick = () => {
-      document.getElementById('calibrationOverlay').style.display = 'none';
-      document.getElementById('calibrationGrid').style.display = 'none';
-      document.getElementById('statusText').innerText = 'calibración completada';
-    };
+    button.onclick = () => this.calculatePrecision();
     
     return button;
+  }
+
+  async calculatePrecision() {
+    const grid = document.getElementById('calibrationGrid');
+    grid.innerHTML = '<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; text-align: center;">Calculando precisión...</div>';
+    
+    let precision_measurements = [];
+    
+    // Test precision on each calibration point
+    for (let i = 0; i < this.calibrationPoints.length; i++) {
+      const point = this.calibrationPoints[i];
+      const targetX = point[0] * window.innerWidth;
+      const targetY = point[1] * window.innerHeight;
+      
+      // Collect 50 measurements per point
+      for (let j = 0; j < 50; j++) {
+        const prediction = await webgazer.getCurrentPrediction();
+        if (prediction) {
+          const distance = Math.sqrt(
+            Math.pow(prediction.x - targetX, 2) + 
+            Math.pow(prediction.y - targetY, 2)
+          );
+          precision_measurements.push(distance);
+        }
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+    }
+    
+    // Calculate precision percentage like calibration.html
+    const screenDiagonal = Math.sqrt(
+      Math.pow(window.innerWidth, 2) + 
+      Math.pow(window.innerHeight, 2)
+    );
+    
+    const avgDistance = precision_measurements.reduce((a, b) => a + b, 0) / precision_measurements.length;
+    const precisionPercentage = Math.round((1 - (avgDistance / screenDiagonal)) * 100);
+    
+    this.showPrecisionResults(precisionPercentage, avgDistance);
+  }
+  
+  showPrecisionResults(precision, avgDistance) {
+    const grid = document.getElementById('calibrationGrid');
+    grid.innerHTML = `
+      <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: white; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px;">
+        <h3>Calibración Completada</h3>
+        <p>Precisión: ${precision}%</p>
+        <p>Distancia promedio: ${Math.round(avgDistance)}px</p>
+        <button onclick="calibrationManager.finishCalibration()">Continuar</button>
+      </div>
+    `;
+  }
+  
+  finishCalibration() {
+    document.getElementById('calibrationOverlay').style.display = 'none';
+    document.getElementById('calibrationGrid').style.display = 'none';
+    document.getElementById('statusText').innerText = 'calibración completada';
   }
 }
 
