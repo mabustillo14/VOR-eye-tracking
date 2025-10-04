@@ -51,12 +51,10 @@
   <!-- Calibration overlay -->
   <div id="calibrationGrid"></div>
 
-  <!-- Scripts: d3, MediaPipe for higher precision -->
+  <!-- Scripts: d3, localforage, webgazer optimizado -->
   <script src="https://d3js.org/d3.v3.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.8.1/localforage.js"></script>
+  <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
 
   <script>
   // ---------------------------
@@ -80,80 +78,57 @@
   let latencyEstimates = [];
   let fixPositions = [];
 
-  // Parámetros de alta precisión para rehabilitación
+  // Parámetros optimizados para mayor precisión
   const SACCADE_VEL_THRESHOLD = 600;
   const SAMPLE_WINDOW_MS = 200;
-  const SMOOTHING_FACTOR = 0.15;
-  const CALIBRATION_POINTS = 13; // más puntos para mayor precisión
+  const SMOOTHING_FACTOR = 0.1; // más suave para rehabilitación
   let smoothedGaze = {x: 0, y: 0};
-  let calibrationMatrix = null;
-  let eyeTracker = null;
-  let videoElement = null;
-  let canvasElement = null;
+  let gazeBuffer = []; // buffer para filtrado avanzado
 
   // Vectores para promedio
   function mean(arr){ return arr.reduce((a,b)=>a+b,0)/Math.max(arr.length,1); }
   function rms(arr){ return Math.sqrt(mean(arr.map(v=>v*v))); }
 
   // ---------------------------
-  // Inicialización MediaPipe (mayor precisión)
+  // Inicialización WebGazer optimizado
   // ---------------------------
   window.onload = async function() {
-    await initializeHighPrecisionEyeTracking();
+    if (!window.saveDataAcrossSessions) {
+        var localstorageDataLabel = 'webgazerGlobalData';
+        localforage.setItem(localstorageDataLabel, null);
+        var localstorageSettingsLabel = 'webgazerGlobalSettings';
+        localforage.setItem(localstorageSettingsLabel, null);
+    }
+
+    // Inicializar WebGazer con configuración de alta precisión
+    const webgazerInstance = await webgazer
+      .setRegression('weightedRidge') // mejor que ridge para precisión
+      .setTracker('TFFacemesh')
+      .begin();
+
+    // Configuración optimizada para rehabilitación
+    webgazerInstance
+      .showVideoPreview(true)
+      .showPredictionPoints(false)
+      .applyKalmanFilter(true)
+      .params.showFaceOverlay = false;
+    
+    // Configurar parámetros internos para mayor precisión
+    webgazer.params.videoViewerWidth = 320;
+    webgazer.params.videoViewerHeight = 240;
+    webgazer.params.faceFeedbackBoxRatio = 0.66;
     
     // UI bindings
-    document.getElementById('statusText').innerText = 'sistema de alta precisión listo';
-    document.getElementById('btnCalibrate').onclick = startAdvancedCalibration;
+    document.getElementById('statusText').innerText = 'listo para calibrar';
+    document.getElementById('btnCalibrate').onclick = startCalibration;
     document.getElementById('btnStart').onclick = startSession;
     document.getElementById('btnStop').onclick = stopSession;
     document.getElementById('btnExport').onclick = exportCSV;
     document.getElementById('btnShowPreview').onclick = togglePreview;
 
     setupCollisionSystem();
+    webgazer.setGazeListener(collisionEyeListener);
   };
-
-  async function initializeHighPrecisionEyeTracking() {
-    // Configurar video con alta resolución
-    videoElement = document.createElement('video');
-    videoElement.style.position = 'fixed';
-    videoElement.style.top = '10px';
-    videoElement.style.left = '10px';
-    videoElement.style.width = '320px';
-    videoElement.style.height = '240px';
-    videoElement.style.zIndex = '100001';
-    document.body.appendChild(videoElement);
-
-    canvasElement = document.createElement('canvas');
-    canvasElement.width = 640;
-    canvasElement.height = 480;
-    
-    // Inicializar MediaPipe FaceMesh
-    const faceMesh = new FaceMesh({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
-    });
-    
-    faceMesh.setOptions({
-      maxNumFaces: 1,
-      refineLandmarks: true,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7
-    });
-    
-    faceMesh.onResults(onFaceMeshResults);
-    
-    // Configurar cámara con alta calidad
-    const camera = new Camera(videoElement, {
-      onFrame: async () => {
-        await faceMesh.send({image: videoElement});
-      },
-      width: 640,
-      height: 480,
-      facingMode: 'user'
-    });
-    
-    await camera.start();
-    eyeTracker = {faceMesh, camera};
-  }
 
   window.onbeforeunload = function() {
     if (window.saveDataAcrossSessions) {
@@ -255,6 +230,297 @@
           r = node.radius + quad.point.radius;
           if (l < r) {
             l = (l - r) / l * .5;
+            node.x -= x *= l;
+            node.y -= y *= l;
+            quad.point.x += x;
+            quad.point.y += y;
+          }
+        }
+        return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
+      };
+    }
+  }
+
+  var webgazerCanvas = null;
+  var previewWidth = webgazer.params && webgazer.params.videoViewerWidth ? webgazer.params.videoViewerWidth : 320;
+
+  // ---------------------------
+  // Listener principal con filtrado avanzado
+  // ---------------------------
+  var collisionEyeListener = async function(data, clock) {
+    if(!data) return;
+
+    // Buffer para filtrado avanzado
+    gazeBuffer.push({x: data.x, y: data.y, t: clock || performance.now()});
+    if (gazeBuffer.length > 5) gazeBuffer.shift();
+
+    // Filtro de mediana para eliminar outliers
+    const recentGazes = gazeBuffer.slice(-3);
+    const medianX = recentGazes.map(g => g.x).sort((a,b) => a-b)[Math.floor(recentGazes.length/2)];
+    const medianY = recentGazes.map(g => g.y).sort((a,b) => a-b)[Math.floor(recentGazes.length/2)];
+
+    // Suavizado exponencial mejorado
+    if (smoothedGaze.x === 0) {
+      smoothedGaze = {x: medianX, y: medianY};
+    } else {
+      smoothedGaze.x = SMOOTHING_FACTOR * medianX + (1 - SMOOTHING_FACTOR) * smoothedGaze.x;
+      smoothedGaze.y = SMOOTHING_FACTOR * medianY + (1 - SMOOTHING_FACTOR) * smoothedGaze.y;
+    }
+
+    // Actualizar colisión
+    nodes[0].px = smoothedGaze.x;
+    nodes[0].py = smoothedGaze.y;
+    force.resume();
+
+    if (!webgazerCanvas) {
+      webgazerCanvas = webgazer.getVideoElementCanvas();
+    }
+
+    // Obtener posiciones facemesh
+    var fmPositions = await webgazer.getTracker().getPositions();
+    if (!fmPositions) return;
+
+    var whr = webgazer.getVideoPreviewToCameraResolutionRatio();
+
+    // Calcular líneas visuales
+    try {
+      var leftEye = fmPositions[145];
+      var rightEye = fmPositions[374];
+      var leftX = previewWidth - leftEye[0] * whr[0];
+      var leftY = leftEye[1] * whr[1];
+      var rightX = previewWidth - rightEye[0] * whr[0];
+      var rightY = rightEye[1] * whr[1];
+
+      d3.select('#eyeline1')
+        .attr("x1",smoothedGaze.x)
+        .attr("y1",smoothedGaze.y)
+        .attr("x2", leftX)
+        .attr("y2", leftY);
+
+      d3.select("#eyeline2")
+        .attr("x1",smoothedGaze.x)
+        .attr("y1",smoothedGaze.y)
+        .attr("x2", rightX)
+        .attr("y2", rightY);
+    } catch (e){}
+
+    d3.select("#predictionSquare")
+      .attr("x",smoothedGaze.x)
+      .attr("y",smoothedGaze.y);
+
+    // Métricas VOR
+    const t = clock || performance.now();
+    frameCount++;
+    document.getElementById('frames').innerText = frameCount;
+
+    const gaze = { x: smoothedGaze.x, y: smoothedGaze.y, t: t };
+
+    // Head orientation mejorado
+    let headAngle = null;
+    try {
+      const nosePt = fmPositions[1] || fmPositions[4];
+      const left = fmPositions[33] || fmPositions[145];
+      const right = fmPositions[263] || fmPositions[374];
+      if (nosePt && left && right) {
+        const nx = previewWidth - nosePt[0] * whr[0];
+        const ny = nosePt[1] * whr[1];
+        const lx = previewWidth - left[0] * whr[0];
+        const rx = previewWidth - right[0] * whr[0];
+        const midEyesX = (lx + rx)/2;
+        const midEyesY = ( (left[1] + right[1]) / 2 ) * whr[1];
+        const vx = nx - midEyesX;
+        const vy = ny - midEyesY;
+        headAngle = Math.atan2(vx, vy) * 180 / Math.PI;
+      }
+    } catch(e) {}
+
+    // Velocidades
+    let headVel = 0, eyeVel = 0;
+    if (lastTimestamp !== null) {
+      const dt = (t - lastTimestamp)/1000.0;
+      if (headAngle !== null && lastHeadAngle !== null && dt > 0) {
+        headVel = (headAngle - lastHeadAngle) / dt;
+      }
+      if (lastGaze !== null) {
+        const dx = (gaze.x - lastGaze.x);
+        const dy = (gaze.y - lastGaze.y);
+        eyeVel = Math.sqrt(dx*dx + dy*dy) / dt;
+      }
+    }
+
+    // Latencia estimada
+    if (Math.abs(headVel) > 50 && lastTimestamp !== null) {
+      latencyEstimates.push({tHead: t, headVel: headVel, responded: false});
+    }
+    for (let ev of latencyEstimates) {
+      if (!ev.responded && Math.abs(eyeVel) > 200) {
+        ev.responded = true;
+        ev.tRespond = t;
+        ev.latencyMs = ev.tRespond - ev.tHead;
+      }
+    }
+
+    // Conteo de sacadas
+    if (eyeVel > SACCADE_VEL_THRESHOLD) {
+      saccCount++;
+      document.getElementById('saccCount').innerText = saccCount;
+    }
+
+    // Fijación RMS
+    fixPositions.push({x:gaze.x, y:gaze.y, t:t});
+    const cutoff = t - SAMPLE_WINDOW_MS;
+    fixPositions = fixPositions.filter(p => p.t >= cutoff);
+    const xs = fixPositions.map(p=>p.x - mean(fixPositions.map(q=>q.x)));
+    const ys = fixPositions.map(p=>p.y - mean(fixPositions.map(q=>q.y)));
+    const rmsVal = rms(xs.concat(ys));
+
+    // VOR gain
+    let vorGain = null;
+    if (Math.abs(headVel) > 5) {
+      vorGain = Math.abs(eyeVel) / Math.abs(headVel);
+    }
+
+    // Actualizar UI
+    document.getElementById('headVel').innerText = headVel ? headVel.toFixed(1) : '-';
+    document.getElementById('eyeVel').innerText = eyeVel ? Math.round(eyeVel) : '-';
+    document.getElementById('vorGain').innerText = vorGain ? vorGain.toFixed(2) : '-';
+    const latSamples = latencyEstimates.filter(e=>e.latencyMs).map(e=>e.latencyMs);
+    document.getElementById('latency').innerText = latSamples.length ? Math.round(mean(latSamples)) + ' ms' : '-';
+    document.getElementById('fixRMS').innerText = rmsVal ? Math.round(rmsVal) + ' px' : '-';
+
+    // Guardar datos
+    if (sessionActive) {
+      recorded.push({
+        t: t,
+        gazeX: gaze.x,
+        gazeY: gaze.y,
+        headAngle: headAngle,
+        headVel: headVel,
+        eyeVel: eyeVel,
+        vorGain: vorGain,
+        latencySamples: latSamples.slice(-5)
+      });
+      document.getElementById('btnExport').disabled = false;
+    }
+
+    lastHeadAngle = headAngle;
+    lastGaze = gaze;
+    lastTimestamp = t;
+  };
+
+  // ---------------------------
+  // Calibración mejorada (13 puntos)
+  // ---------------------------
+  function startCalibration(){
+    const grid = document.getElementById('calibrationGrid');
+    grid.innerHTML = '';
+    grid.style.display = 'block';
+    
+    // 13 puntos para mejor cobertura
+    const points = [
+      [0.1,0.1],[0.3,0.1],[0.5,0.1],[0.7,0.1],[0.9,0.1],
+      [0.1,0.3],[0.5,0.3],[0.9,0.3],
+      [0.1,0.5],[0.5,0.5],[0.9,0.5],
+      [0.1,0.7],[0.5,0.7],[0.9,0.7],
+      [0.1,0.9],[0.3,0.9],[0.5,0.9],[0.7,0.9],[0.9,0.9]
+    ];
+    
+    document.getElementById('statusText').innerText = 'calibración de precisión: mira cada punto 2 segundos';
+    
+    points.forEach((p,i) => {
+      const el = document.createElement('div');
+      el.className = 'calPoint';
+      el.style.left = (p[0]*100) + '%';
+      el.style.top  = (p[1]*100) + '%';
+      el.innerText = (i+1);
+      el.onclick = async function(){
+        el.style.background = '#0f0';
+        const samples = [];
+        const startTime = performance.now();
+        
+        // Recoger muestras durante 2 segundos
+        while (performance.now() - startTime < 2000) {
+          const pred = await webgazer.getCurrentPrediction();
+          if (pred) samples.push(pred);
+          await new Promise(r=>setTimeout(r,50));
+        }
+        
+        // Registrar punto con múltiples muestras
+        if (samples.length > 10) {
+          for (let j = 0; j < 3; j++) {
+            webgazer.recordScreenPosition(p[0] * window.innerWidth, p[1] * window.innerHeight, 'click');
+          }
+        }
+        
+        el.style.background = '#0af';
+      };
+      grid.appendChild(el);
+    });
+
+    const end = document.createElement('button');
+    end.innerText = 'Finalizar calibración';
+    end.style.position='absolute';
+    end.style.left='50%';
+    end.style.bottom='6%';
+    end.style.transform='translateX(-50%)';
+    end.onclick = function(){
+      grid.style.display='none';
+      document.getElementById('statusText').innerText = 'calibración de alta precisión completada';
+    };
+    grid.appendChild(end);
+  }
+
+  // ---------------------------
+  // Session control, export
+  // ---------------------------
+  function startSession(){
+    sessionActive = true;
+    recorded = [];
+    frameCount = 0;
+    saccCount = 0;
+    lastHeadAngle = null;
+    lastGaze = null;
+    lastTimestamp = null;
+    latencyEstimates = [];
+    fixPositions = [];
+    document.getElementById('btnStop').disabled = false;
+    document.getElementById('btnStart').disabled = true;
+    document.getElementById('statusText').innerText = 'sesión activa';
+    document.getElementById('saccCount').innerText = '0';
+  }
+
+  function stopSession(){
+    sessionActive = false;
+    document.getElementById('btnStop').disabled = true;
+    document.getElementById('btnStart').disabled = false;
+    document.getElementById('statusText').innerText = 'sesión detenida';
+    document.getElementById('btnExport').disabled = recorded.length === 0;
+  }
+
+  function exportCSV(){
+    if (!recorded || recorded.length === 0) return alert('No hay datos para exportar.');
+    const header = Object.keys(recorded[0]);
+    const csv = [header.join(',')].concat(
+      recorded.map(r => header.map(h => JSON.stringify(r[h]===undefined ? '' : r[h])).join(','))
+    ).join('\n');
+    const blob = new Blob([csv], {type: 'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const link = document.getElementById('downloadLink');
+    link.href = url;
+    link.download = 'vor_session_' + (new Date()).toISOString().replace(/[:.]/g,'_') + '.csv';
+    link.style.display = 'inline-block';
+    link.click();
+    document.getElementById('btnExport').disabled = false;
+  }
+
+  function togglePreview(){
+    const current = webgazer.params.showVideoPreview;
+    webgazer.showVideoPreview(!current);
+  }
+
+  </script>
+</body>
+</html>5;
             node.x -= x *= l;
             node.y -= y *= l;
             quad.point.x += x;
