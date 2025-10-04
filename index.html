@@ -2,993 +2,113 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Experiencia AR / Rehabilitación VOR</title>
+  <title>VOR Rehabilitación - Sistema de Entrenamiento</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    html,body { height:100%; margin:0; font-family: Arial, Helvetica, sans-serif; background:#111; color:#eee; }
-    #ui { position: fixed; right: 12px; top: 12px; width:340px; background: rgba(0,0,0,0.6); padding:12px; border-radius:8px; z-index:200000; }
-    #ui h2 { margin:6px 0 8px 0; font-size:16px; }
-    #controls button { margin:6px 6px 6px 0; padding:8px 10px; }
-    #status { font-size:12px; margin-top:6px; color:#ddd; }
-    #metrics { margin-top:8px; font-size:13px; max-height:240px; overflow:auto; }
-    svg { background: transparent; }
-    #calibrationGrid { position: fixed; left:0; top:0; width:100%; height:100%; z-index:300000; display:none; }
-    .calPoint { width:28px; height:28px; border-radius:50%; background:#0af; position:absolute; transform:translate(-50%,-50%); display:flex; align-items:center; justify-content:center; color:#000; font-weight:bold; cursor:pointer; }
-    #instructions { font-size:13px; margin-top:8px; color:#ccc; }
-    #downloadLink { display:inline-block; margin-top:8px; }
-    .small { font-size:12px; color:#bbb; }
-  </style>
+  <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <div id="ui" aria-live="polite">
-    <h2>VOR Rehabilitación</h2>
-    <div id="controls">
-      <button id="btnCalibrate">Calibración (9 puntos)</button>
-      <button id="btnStart">Iniciar sesión</button>
-      <button id="btnStop" disabled>Detener sesión</button>
-      <button id="btnExport" disabled>Exportar CSV</button>
-      <button id="btnShowPreview">Alternar video</button>
-    </div>
-    <div id="status">Estado: <span id="statusText">inicializando...</span></div>
+  <div id="app">
+    <!-- Header -->
+    <header class="header">
+      <h1>VOR Rehabilitación</h1>
+      <div class="level-indicator">
+        <span>Nivel: <span id="currentLevel">1</span></span>
+        <div class="progress-bar">
+          <div id="progressFill" class="progress-fill"></div>
+        </div>
+      </div>
+    </header>
 
-    <div id="instructions">
-      Protocolo sugerido (ejemplo): mira al centro, luego gira la cabeza rápidamente a la derecha/izquierda (aprox. 20°) manteniendo la mirada en el objetivo. Repetir 10 veces por dirección. El sistema calcula métricas aproximadas.
+    <!-- Main Interface -->
+    <div id="mainInterface" class="main-interface">
+      <div class="control-panel">
+        <div class="exercise-selector">
+          <h3>Seleccionar Ejercicio</h3>
+          <div class="exercise-buttons">
+            <button id="btnLevel1" class="exercise-btn active">Nivel 1: Fijación Central</button>
+            <button id="btnLevel2" class="exercise-btn">Nivel 2: Movimiento Horizontal</button>
+            <button id="btnLevel3" class="exercise-btn">Nivel 3: Movimiento Vertical</button>
+            <button id="btnLevel4" class="exercise-btn">Nivel 4: Movimiento Diagonal</button>
+            <button id="btnLevel5" class="exercise-btn">Nivel 5: Seguimiento Complejo</button>
+          </div>
+        </div>
+
+        <div class="session-controls">
+          <button id="btnCalibrate" class="btn-primary">Calibrar Sistema</button>
+          <button id="btnStart" class="btn-success">Iniciar Ejercicio</button>
+          <button id="btnPause" class="btn-warning" disabled>Pausar</button>
+          <button id="btnStop" class="btn-danger" disabled>Detener</button>
+        </div>
+
+        <div class="metrics-panel">
+          <h4>Métricas en Tiempo Real</h4>
+          <div class="metrics-grid">
+            <div class="metric">
+              <label>Estabilidad de Fijación:</label>
+              <span id="fixationStability" class="metric-value">-</span>
+            </div>
+            <div class="metric">
+              <label>Precisión VOR:</label>
+              <span id="vorAccuracy" class="metric-value">-</span>
+            </div>
+            <div class="metric">
+              <label>Tiempo en Objetivo:</label>
+              <span id="timeOnTarget" class="metric-value">-</span>
+            </div>
+            <div class="metric">
+              <label>Puntuación:</label>
+              <span id="currentScore" class="metric-value score">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="exercise-area">
+        <div id="exerciseInstructions" class="instructions">
+          <h3>Instrucciones</h3>
+          <p>Selecciona un nivel para comenzar el entrenamiento VOR.</p>
+        </div>
+        <div id="targetArea" class="target-area">
+          <div id="fixationTarget" class="fixation-target"></div>
+          <div id="gazeIndicator" class="gaze-indicator"></div>
+        </div>
+      </div>
     </div>
 
-    <div id="metrics">
-      <div><strong>Métricas en tiempo real</strong></div>
-      <div class="small">Head angular vel: <span id="headVel">-</span> °/s</div>
-      <div class="small">Eye (gaze) vel: <span id="eyeVel">-</span> px/s</div>
-      <div class="small">VOR gain (approx): <span id="vorGain">-</span></div>
-      <div class="small">Latency est.: <span id="latency">-</span> ms</div>
-      <div class="small">Fixation stability (RMS): <span id="fixRMS">-</span></div>
-      <div class="small">Sacadas contadas: <span id="saccCount">0</span></div>
-      <div class="small">Frames registrados: <span id="frames">0</span></div>
+    <!-- Calibration Overlay -->
+    <div id="calibrationOverlay" class="calibration-overlay">
+      <div class="calibration-content">
+        <h2>Calibración del Sistema</h2>
+        <p>Mira fijamente cada punto que aparezca y mantén la mirada durante 2 segundos.</p>
+        <div id="calibrationGrid" class="calibration-grid"></div>
+        <div class="calibration-progress">
+          <span id="calibrationStatus">Preparando calibración...</span>
+        </div>
+      </div>
     </div>
-    <a id="downloadLink" href="#" style="display:none">[descargar CSV]</a>
+
+    <!-- Results Modal -->
+    <div id="resultsModal" class="modal">
+      <div class="modal-content">
+        <h2>Resultados del Ejercicio</h2>
+        <div id="resultsContent" class="results-content"></div>
+        <div class="modal-actions">
+          <button id="btnExport" class="btn-secondary">Exportar Datos</button>
+          <button id="btnNewSession" class="btn-primary">Nueva Sesión</button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- Calibration overlay -->
-  <div id="calibrationGrid"></div>
-
-  <!-- Scripts: d3, localforage, webgazer optimizado -->
+  <!-- Scripts -->
   <script src="https://d3js.org/d3.v3.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.8.1/localforage.js"></script>
   <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
-
-  <script>
-  // ---------------------------
-  // Config inicial
-  // ---------------------------
-  window.saveDataAcrossSessions = false;
-  const collisionSVG = "collisionSVG";
-  var force = [];
-  var nodes = [];
-
-  // Datos de registro
-  let sessionActive = false;
-  let recorded = [];
-  let frameCount = 0;
-  let saccCount = 0;
-
-  // Para cálculos temporales
-  let lastHeadAngle = null;
-  let lastGaze = null;
-  let lastTimestamp = null;
-  let latencyEstimates = [];
-  let fixPositions = [];
-
-  // Parámetros optimizados para mayor precisión
-  const SACCADE_VEL_THRESHOLD = 600;
-  const SAMPLE_WINDOW_MS = 200;
-  const SMOOTHING_FACTOR = 0.1; // más suave para rehabilitación
-  let smoothedGaze = {x: 0, y: 0};
-  let gazeBuffer = []; // buffer para filtrado avanzado
-
-  // Vectores para promedio
-  function mean(arr){ return arr.reduce((a,b)=>a+b,0)/Math.max(arr.length,1); }
-  function rms(arr){ return Math.sqrt(mean(arr.map(v=>v*v))); }
-
-  // ---------------------------
-  // Inicialización WebGazer optimizado
-  // ---------------------------
-  window.onload = async function() {
-    if (!window.saveDataAcrossSessions) {
-        var localstorageDataLabel = 'webgazerGlobalData';
-        localforage.setItem(localstorageDataLabel, null);
-        var localstorageSettingsLabel = 'webgazerGlobalSettings';
-        localforage.setItem(localstorageSettingsLabel, null);
-    }
-
-    // Inicializar WebGazer con configuración de alta precisión
-    const webgazerInstance = await webgazer
-      .setRegression('weightedRidge') // mejor que ridge para precisión
-      .setTracker('TFFacemesh')
-      .begin();
-
-    // Configuración optimizada para rehabilitación
-    webgazerInstance
-      .showVideoPreview(true)
-      .showPredictionPoints(false)
-      .applyKalmanFilter(true)
-      .params.showFaceOverlay = false;
-    
-    // Configurar parámetros internos para mayor precisión
-    webgazer.params.videoViewerWidth = 320;
-    webgazer.params.videoViewerHeight = 240;
-    webgazer.params.faceFeedbackBoxRatio = 0.66;
-    
-    // UI bindings
-    document.getElementById('statusText').innerText = 'listo para calibrar';
-    document.getElementById('btnCalibrate').onclick = startCalibration;
-    document.getElementById('btnStart').onclick = startSession;
-    document.getElementById('btnStop').onclick = stopSession;
-    document.getElementById('btnExport').onclick = exportCSV;
-    document.getElementById('btnShowPreview').onclick = togglePreview;
-
-    setupCollisionSystem();
-    webgazer.setGazeListener(collisionEyeListener);
-  };
-
-  window.onbeforeunload = function() {
-    if (window.saveDataAcrossSessions) {
-        webgazer.end();
-    } else {
-        localforage.clear();
-    }
-  }
-
-  // ---------------------------
-  // Sistema visual (collision) basado en tu base
-  // ---------------------------
-  function setupCollisionSystem() {
-    var width = window.innerWidth;
-    var height = window.innerHeight;
-
-    var numberOfNodes = 200;
-
-    nodes = d3.range(numberOfNodes).map(function() { return {radius: Math.random() * 12 + 4}; } ),
-    nodes[0].radius = 0;
-    nodes[0].fixed = true;
-
-    force = d3.layout.force()
-      .gravity(0.05)
-      .charge(function(d, i) { return i ? 0 : -2000; })
-      .nodes(nodes)
-      .size([width, height])
-      .start();
-
-    var svg = d3.select("body").append("svg")
-      .attr("id", collisionSVG)
-      .attr("width", width)
-      .attr("height", height)
-      .style("top", "0px")
-      .style("left","0px")
-      .style("margin","0px")
-      .style("position","absolute")
-      .style("z-index", 100000);
-
-    var color = d3.scale.category10();
-    var colors = [];
-    for(var i=0; i<numberOfNodes-2; i++){
-      colors[i] = color(0);
-    }
-    colors.push("orange");
-
-    svg.selectAll("circle")
-      .data(nodes.slice(1))
-      .enter().append("circle")
-      .attr("r", function(d) { return d.radius; })
-      .style("fill", function(d, i) { return colors[i]; });
-
-    force.on("tick", function(e) {
-      var q = d3.geom.quadtree(nodes),
-      i = 0,
-      n = nodes.length;
-
-      while (++i < n) q.visit(collide(nodes[i]));
-
-      svg.selectAll("circle")
-      .attr("cx", function(d) { return d.x; })
-      .attr("cy", function(d) { return d.y; });
-    });
-
-    svg.append("line")
-      .attr("id", "eyeline1" )
-      .attr("stroke-width",2)
-      .attr("stroke","red");
-
-    svg.append("line")
-      .attr("id", "eyeline2" )
-      .attr("stroke-width",2)
-      .attr("stroke","red");
-
-    svg.append("rect")
-      .attr("id","predictionSquare")
-      .attr("width",6)
-      .attr("height",6)
-      .attr("fill","red");
-
-    svg.on("mousemove", function() {
-      var p1 = d3.mouse(this);
-      nodes[0].px = p1[0];
-      nodes[0].py = p1[1];
-      force.resume();
-    });
-
-    function collide(node) {
-      var r = node.radius + 16,
-      nx1 = node.x - r,
-      nx2 = node.x + r,
-      ny1 = node.y - r,
-      ny2 = node.y + r;
-      return function(quad, x1, y1, x2, y2) {
-        if (quad.point && (quad.point !== node)) {
-          var x = node.x - quad.point.x,
-          y = node.y - quad.point.y,
-          l = Math.sqrt(x * x + y * y),
-          r = node.radius + quad.point.radius;
-          if (l < r) {
-            l = (l - r) / l * .5;
-            node.x -= x *= l;
-            node.y -= y *= l;
-            quad.point.x += x;
-            quad.point.y += y;
-          }
-        }
-        return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
-      };
-    }
-  }
-
-  var webgazerCanvas = null;
-  var previewWidth = webgazer.params && webgazer.params.videoViewerWidth ? webgazer.params.videoViewerWidth : 320;
-
-  // ---------------------------
-  // Listener principal con filtrado avanzado
-  // ---------------------------
-  var collisionEyeListener = async function(data, clock) {
-    if(!data) return;
-
-    // Buffer para filtrado avanzado
-    gazeBuffer.push({x: data.x, y: data.y, t: clock || performance.now()});
-    if (gazeBuffer.length > 5) gazeBuffer.shift();
-
-    // Filtro de mediana para eliminar outliers
-    const recentGazes = gazeBuffer.slice(-3);
-    const medianX = recentGazes.map(g => g.x).sort((a,b) => a-b)[Math.floor(recentGazes.length/2)];
-    const medianY = recentGazes.map(g => g.y).sort((a,b) => a-b)[Math.floor(recentGazes.length/2)];
-
-    // Suavizado exponencial mejorado
-    if (smoothedGaze.x === 0) {
-      smoothedGaze = {x: medianX, y: medianY};
-    } else {
-      smoothedGaze.x = SMOOTHING_FACTOR * medianX + (1 - SMOOTHING_FACTOR) * smoothedGaze.x;
-      smoothedGaze.y = SMOOTHING_FACTOR * medianY + (1 - SMOOTHING_FACTOR) * smoothedGaze.y;
-    }
-
-    // Actualizar colisión
-    nodes[0].px = smoothedGaze.x;
-    nodes[0].py = smoothedGaze.y;
-    force.resume();
-
-    if (!webgazerCanvas) {
-      webgazerCanvas = webgazer.getVideoElementCanvas();
-    }
-
-    // Obtener posiciones facemesh
-    var fmPositions = await webgazer.getTracker().getPositions();
-    if (!fmPositions) return;
-
-    var whr = webgazer.getVideoPreviewToCameraResolutionRatio();
-
-    // Calcular líneas visuales
-    try {
-      var leftEye = fmPositions[145];
-      var rightEye = fmPositions[374];
-      var leftX = previewWidth - leftEye[0] * whr[0];
-      var leftY = leftEye[1] * whr[1];
-      var rightX = previewWidth - rightEye[0] * whr[0];
-      var rightY = rightEye[1] * whr[1];
-
-      d3.select('#eyeline1')
-        .attr("x1",smoothedGaze.x)
-        .attr("y1",smoothedGaze.y)
-        .attr("x2", leftX)
-        .attr("y2", leftY);
-
-      d3.select("#eyeline2")
-        .attr("x1",smoothedGaze.x)
-        .attr("y1",smoothedGaze.y)
-        .attr("x2", rightX)
-        .attr("y2", rightY);
-    } catch (e){}
-
-    d3.select("#predictionSquare")
-      .attr("x",smoothedGaze.x)
-      .attr("y",smoothedGaze.y);
-
-    // Métricas VOR
-    const t = clock || performance.now();
-    frameCount++;
-    document.getElementById('frames').innerText = frameCount;
-
-    const gaze = { x: smoothedGaze.x, y: smoothedGaze.y, t: t };
-
-    // Head orientation mejorado
-    let headAngle = null;
-    try {
-      const nosePt = fmPositions[1] || fmPositions[4];
-      const left = fmPositions[33] || fmPositions[145];
-      const right = fmPositions[263] || fmPositions[374];
-      if (nosePt && left && right) {
-        const nx = previewWidth - nosePt[0] * whr[0];
-        const ny = nosePt[1] * whr[1];
-        const lx = previewWidth - left[0] * whr[0];
-        const rx = previewWidth - right[0] * whr[0];
-        const midEyesX = (lx + rx)/2;
-        const midEyesY = ( (left[1] + right[1]) / 2 ) * whr[1];
-        const vx = nx - midEyesX;
-        const vy = ny - midEyesY;
-        headAngle = Math.atan2(vx, vy) * 180 / Math.PI;
-      }
-    } catch(e) {}
-
-    // Velocidades
-    let headVel = 0, eyeVel = 0;
-    if (lastTimestamp !== null) {
-      const dt = (t - lastTimestamp)/1000.0;
-      if (headAngle !== null && lastHeadAngle !== null && dt > 0) {
-        headVel = (headAngle - lastHeadAngle) / dt;
-      }
-      if (lastGaze !== null) {
-        const dx = (gaze.x - lastGaze.x);
-        const dy = (gaze.y - lastGaze.y);
-        eyeVel = Math.sqrt(dx*dx + dy*dy) / dt;
-      }
-    }
-
-    // Latencia estimada
-    if (Math.abs(headVel) > 50 && lastTimestamp !== null) {
-      latencyEstimates.push({tHead: t, headVel: headVel, responded: false});
-    }
-    for (let ev of latencyEstimates) {
-      if (!ev.responded && Math.abs(eyeVel) > 200) {
-        ev.responded = true;
-        ev.tRespond = t;
-        ev.latencyMs = ev.tRespond - ev.tHead;
-      }
-    }
-
-    // Conteo de sacadas
-    if (eyeVel > SACCADE_VEL_THRESHOLD) {
-      saccCount++;
-      document.getElementById('saccCount').innerText = saccCount;
-    }
-
-    // Fijación RMS
-    fixPositions.push({x:gaze.x, y:gaze.y, t:t});
-    const cutoff = t - SAMPLE_WINDOW_MS;
-    fixPositions = fixPositions.filter(p => p.t >= cutoff);
-    const xs = fixPositions.map(p=>p.x - mean(fixPositions.map(q=>q.x)));
-    const ys = fixPositions.map(p=>p.y - mean(fixPositions.map(q=>q.y)));
-    const rmsVal = rms(xs.concat(ys));
-
-    // VOR gain
-    let vorGain = null;
-    if (Math.abs(headVel) > 5) {
-      vorGain = Math.abs(eyeVel) / Math.abs(headVel);
-    }
-
-    // Actualizar UI
-    document.getElementById('headVel').innerText = headVel ? headVel.toFixed(1) : '-';
-    document.getElementById('eyeVel').innerText = eyeVel ? Math.round(eyeVel) : '-';
-    document.getElementById('vorGain').innerText = vorGain ? vorGain.toFixed(2) : '-';
-    const latSamples = latencyEstimates.filter(e=>e.latencyMs).map(e=>e.latencyMs);
-    document.getElementById('latency').innerText = latSamples.length ? Math.round(mean(latSamples)) + ' ms' : '-';
-    document.getElementById('fixRMS').innerText = rmsVal ? Math.round(rmsVal) + ' px' : '-';
-
-    // Guardar datos
-    if (sessionActive) {
-      recorded.push({
-        t: t,
-        gazeX: gaze.x,
-        gazeY: gaze.y,
-        headAngle: headAngle,
-        headVel: headVel,
-        eyeVel: eyeVel,
-        vorGain: vorGain,
-        latencySamples: latSamples.slice(-5)
-      });
-      document.getElementById('btnExport').disabled = false;
-    }
-
-    lastHeadAngle = headAngle;
-    lastGaze = gaze;
-    lastTimestamp = t;
-  };
-
-  // ---------------------------
-  // Calibración mejorada (13 puntos)
-  // ---------------------------
-  function startCalibration(){
-    const grid = document.getElementById('calibrationGrid');
-    grid.innerHTML = '';
-    grid.style.display = 'block';
-    
-    // 13 puntos para mejor cobertura
-    const points = [
-      [0.1,0.1],[0.3,0.1],[0.5,0.1],[0.7,0.1],[0.9,0.1],
-      [0.1,0.3],[0.5,0.3],[0.9,0.3],
-      [0.1,0.5],[0.5,0.5],[0.9,0.5],
-      [0.1,0.7],[0.5,0.7],[0.9,0.7],
-      [0.1,0.9],[0.3,0.9],[0.5,0.9],[0.7,0.9],[0.9,0.9]
-    ];
-    
-    document.getElementById('statusText').innerText = 'calibración de precisión: mira cada punto 2 segundos';
-    
-    points.forEach((p,i) => {
-      const el = document.createElement('div');
-      el.className = 'calPoint';
-      el.style.left = (p[0]*100) + '%';
-      el.style.top  = (p[1]*100) + '%';
-      el.innerText = (i+1);
-      el.onclick = async function(){
-        el.style.background = '#0f0';
-        const samples = [];
-        const startTime = performance.now();
-        
-        // Recoger muestras durante 2 segundos
-        while (performance.now() - startTime < 2000) {
-          const pred = await webgazer.getCurrentPrediction();
-          if (pred) samples.push(pred);
-          await new Promise(r=>setTimeout(r,50));
-        }
-        
-        // Registrar punto con múltiples muestras
-        if (samples.length > 10) {
-          for (let j = 0; j < 3; j++) {
-            webgazer.recordScreenPosition(p[0] * window.innerWidth, p[1] * window.innerHeight, 'click');
-          }
-        }
-        
-        el.style.background = '#0af';
-      };
-      grid.appendChild(el);
-    });
-
-    const end = document.createElement('button');
-    end.innerText = 'Finalizar calibración';
-    end.style.position='absolute';
-    end.style.left='50%';
-    end.style.bottom='6%';
-    end.style.transform='translateX(-50%)';
-    end.onclick = function(){
-      grid.style.display='none';
-      document.getElementById('statusText').innerText = 'calibración de alta precisión completada';
-    };
-    grid.appendChild(end);
-  }
-
-  // ---------------------------
-  // Session control, export
-  // ---------------------------
-  function startSession(){
-    sessionActive = true;
-    recorded = [];
-    frameCount = 0;
-    saccCount = 0;
-    lastHeadAngle = null;
-    lastGaze = null;
-    lastTimestamp = null;
-    latencyEstimates = [];
-    fixPositions = [];
-    document.getElementById('btnStop').disabled = false;
-    document.getElementById('btnStart').disabled = true;
-    document.getElementById('statusText').innerText = 'sesión activa';
-    document.getElementById('saccCount').innerText = '0';
-  }
-
-  function stopSession(){
-    sessionActive = false;
-    document.getElementById('btnStop').disabled = true;
-    document.getElementById('btnStart').disabled = false;
-    document.getElementById('statusText').innerText = 'sesión detenida';
-    document.getElementById('btnExport').disabled = recorded.length === 0;
-  }
-
-  function exportCSV(){
-    if (!recorded || recorded.length === 0) return alert('No hay datos para exportar.');
-    const header = Object.keys(recorded[0]);
-    const csv = [header.join(',')].concat(
-      recorded.map(r => header.map(h => JSON.stringify(r[h]===undefined ? '' : r[h])).join(','))
-    ).join('\n');
-    const blob = new Blob([csv], {type: 'text/csv'});
-    const url = URL.createObjectURL(blob);
-    const link = document.getElementById('downloadLink');
-    link.href = url;
-    link.download = 'vor_session_' + (new Date()).toISOString().replace(/[:.]/g,'_') + '.csv';
-    link.style.display = 'inline-block';
-    link.click();
-    document.getElementById('btnExport').disabled = false;
-  }
-
-  function togglePreview(){
-    const current = webgazer.params.showVideoPreview;
-    webgazer.showVideoPreview(!current);
-  }
-
-  </script>
-</body>
-</html>5;
-            node.x -= x *= l;
-            node.y -= y *= l;
-            quad.point.x += x;
-            quad.point.y += y;
-          }
-        }
-        return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
-      };
-    }
-  }
-
-  var webgazerCanvas = null;
-  var previewWidth = webgazer.params && webgazer.params.videoViewerWidth ? webgazer.params.videoViewerWidth : 320;
-
-  // ---------------------------
-  // Listener principal: recibe data de gaze y calcula métricas
-  // ---------------------------
-  function onFaceMeshResults(results) {
-    if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) return;
-    
-    const landmarks = results.multiFaceLandmarks[0];
-    const gazePoint = calculateHighPrecisionGaze(landmarks);
-    
-    if (gazePoint) {
-      processGazeData(gazePoint, performance.now());
-    }
-  }
-
-  function calculateHighPrecisionGaze(landmarks) {
-    // Usar múltiples puntos del ojo para mayor precisión
-    const leftEyePoints = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
-    const rightEyePoints = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398];
-    
-    // Calcular centro de cada ojo con mayor precisión
-    const leftEyeCenter = getEyeCenter(landmarks, leftEyePoints);
-    const rightEyeCenter = getEyeCenter(landmarks, rightEyePoints);
-    
-    // Calcular dirección de la mirada usando geometría 3D
-    const gazeVector = calculateGazeVector(landmarks, leftEyeCenter, rightEyeCenter);
-    
-    if (calibrationMatrix) {
-      return applyCalibrationTransform(gazeVector);
-    }
-    
-    // Mapeo básico sin calibración
-    return {
-      x: window.innerWidth * (0.5 + gazeVector.x * 0.5),
-      y: window.innerHeight * (0.5 + gazeVector.y * 0.5)
-    };
-  }
-
-  function getEyeCenter(landmarks, eyePoints) {
-    let x = 0, y = 0, z = 0;
-    for (const point of eyePoints) {
-      x += landmarks[point].x;
-      y += landmarks[point].y;
-      z += landmarks[point].z || 0;
-    }
-    return {x: x/eyePoints.length, y: y/eyePoints.length, z: z/eyePoints.length};
-  }
-
-  function calculateGazeVector(landmarks, leftEye, rightEye) {
-    // Usar puntos de referencia facial para orientación
-    const noseTip = landmarks[1];
-    const foreheadCenter = landmarks[9];
-    
-    // Vector de orientación facial
-    const faceVector = {
-      x: noseTip.x - foreheadCenter.x,
-      y: noseTip.y - foreheadCenter.y,
-      z: (noseTip.z || 0) - (foreheadCenter.z || 0)
-    };
-    
-    // Calcular dirección de mirada relativa
-    const eyeCenter = {
-      x: (leftEye.x + rightEye.x) / 2,
-      y: (leftEye.y + rightEye.y) / 2,
-      z: (leftEye.z + rightEye.z) / 2
-    };
-    
-    return {
-      x: (eyeCenter.x - 0.5) * 2,
-      y: (eyeCenter.y - 0.5) * 2
-    };
-  }
-
-  function applyCalibrationTransform(gazeVector) {
-    // Aplicar matriz de calibración para mayor precisión
-    const x = calibrationMatrix.a * gazeVector.x + calibrationMatrix.b * gazeVector.y + calibrationMatrix.c;
-    const y = calibrationMatrix.d * gazeVector.x + calibrationMatrix.e * gazeVector.y + calibrationMatrix.f;
-    
-    return {
-      x: Math.max(0, Math.min(window.innerWidth, x)),
-      y: Math.max(0, Math.min(window.innerHeight, y))
-    };
-  }
-
-  function processGazeData(data, clock) {
-    if (!data) return;
-
-    // Filtro Kalman mejorado para suavizado
-    if (smoothedGaze.x === 0) {
-      smoothedGaze = {x: data.x, y: data.y};
-    } else {
-      smoothedGaze.x = SMOOTHING_FACTOR * data.x + (1 - SMOOTHING_FACTOR) * smoothedGaze.x;
-      smoothedGaze.y = SMOOTHING_FACTOR * data.y + (1 - SMOOTHING_FACTOR) * smoothedGaze.y;
-    }
-
-    // Actualizar visualización
-    nodes[0].px = smoothedGaze.x;
-    nodes[0].py = smoothedGaze.y;
-    force.resume();
-
-    d3.select("#predictionSquare")
-      .attr("x", smoothedGaze.x)
-      .attr("y", smoothedGaze.y);
-
-    // Continuar con métricas VOR
-    calculateVORMetrics(smoothedGaze, clock);a.x + (1 - SMOOTHING_FACTOR) * smoothedGaze.x;
-      smoothedGaze.y = SMOOTHING_FACTOR * data.y + (1 - SMOOTHING_FACTOR) * smoothedGaze.y;
-    }
-
-    // actualiza colisión con gaze suavizado
-    nodes[0].px = smoothedGaze.x;
-    nodes[0].py = smoothedGaze.y;
-    force.resume();
-
-    if (!webgazerCanvas) {
-      webgazerCanvas = webgazer.getVideoElementCanvas();
-    }
-
-    // obtiene posiciones facemesh
-    var fmPositions = await webgazer.getTracker().getPositions(); // array de landmarks
-    if (!fmPositions) return;
-
-    var whr = webgazer.getVideoPreviewToCameraResolutionRatio();
-
-    // calcula líneas visuales (ojo izquierdo/derecho)
-    try {
-      var leftEye = fmPositions[145];  // landmark ejemplo
-      var rightEye = fmPositions[374]; // landmark ejemplo
-      var nose = fmPositions[1] || fmPositions[4]; // aproximación
-
-      // Ajuste según ratio
-      var leftX = previewWidth - leftEye[0] * whr[0];
-      var leftY = leftEye[1] * whr[1];
-      var rightX = previewWidth - rightEye[0] * whr[0];
-      var rightY = rightEye[1] * whr[1];
-
-      d3.select('#eyeline1')
-        .attr("x1",smoothedGaze.x)
-        .attr("y1",smoothedGaze.y)
-        .attr("x2", leftX)
-        .attr("y2", leftY);
-
-      d3.select("#eyeline2")
-        .attr("x1",smoothedGaze.x)
-        .attr("y1",smoothedGaze.y)
-        .attr("x2", rightX)
-        .attr("y2", rightY);
-    } catch (e){
-      // ignore si indices no existen
-    }
-
-    d3.select("#predictionSquare")
-      .attr("x",smoothedGaze.x)
-      .attr("y",smoothedGaze.y);
-
-    // --- MÉTRICAS ---
-    // timestamp
-    const t = clock || performance.now();
-    frameCount++;
-    document.getElementById('frames').innerText = frameCount;
-
-    // gaze (predicción) actual suavizado
-    const gaze = { x: smoothedGaze.x, y: smoothedGaze.y, t: t };
-
-    // head orientation estimado por la malla: usamos vector entre ojos y nariz para aproximar yaw
-    let headAngle = null; // grados
-    try {
-      const nosePt = fmPositions[1] || fmPositions[4];
-      const left = fmPositions[33] || fmPositions[145];
-      const right = fmPositions[263] || fmPositions[374];
-      if (nosePt && left && right) {
-        // coordenadas relacionadas con preview ratio
-        const nx = previewWidth - nosePt[0] * whr[0];
-        const ny = nosePt[1] * whr[1];
-        const lx = previewWidth - left[0] * whr[0];
-        const rx = previewWidth - right[0] * whr[0];
-        // eje horizontal: vector entre ojos
-        const midEyesX = (lx + rx)/2;
-        const midEyesY = ( (left[1] + right[1]) / 2 ) * whr[1];
-        // vector nose <- midEyes
-        const vx = nx - midEyesX;
-        const vy = ny - midEyesY;
-        // angle in radians relative to vertical (approx yaw/pitch mixture)
-        headAngle = Math.atan2(vx, vy) * 180 / Math.PI; // signo y orientación arbitraria
-      }
-    } catch(e) {
-      headAngle = null;
-    }
-
-    // velocidades aproximadas
-    let headVel = 0;
-    let eyeVel = 0;
-    if (lastTimestamp !== null) {
-      const dt = (t - lastTimestamp)/1000.0; // s
-      if (headAngle !== null && lastHeadAngle !== null && dt > 0) {
-        headVel = (headAngle - lastHeadAngle) / dt; // deg/s
-      }
-      if (lastGaze !== null) {
-        const dx = (gaze.x - lastGaze.x);
-        const dy = (gaze.y - lastGaze.y);
-        eyeVel = Math.sqrt(dx*dx + dy*dy) / dt; // px/s
-      }
-    }
-
-    // latencia estimada (muy aproximada): tiempo entre cambio de headAngle y cambio de gaze sign
-    // método simple: si detectamos un pico de headVel, medimos cuándo gazeVel responde. Guardamos dif.
-    if (Math.abs(headVel) > 50 && lastTimestamp !== null) { // umbral head
-      // registra tiempo del "evento de cabeza"
-      latencyEstimates.push({tHead: t, headVel: headVel, responded: false});
-    }
-    // buscar eventos pendientes y marcar respuesta si gaze cambia > umbral
-    for (let ev of latencyEstimates) {
-      if (!ev.responded && Math.abs(eyeVel) > 200) {
-        ev.responded = true;
-        ev.tRespond = t;
-        ev.latencyMs = ev.tRespond - ev.tHead;
-      }
-    }
-
-    // conteo de sacadas simple
-    if (eyeVel > SACCADE_VEL_THRESHOLD) {
-      saccCount++;
-      document.getElementById('saccCount').innerText = saccCount;
-    }
-
-    // fijación: RMS en ventana corta
-    fixPositions.push({x:gaze.x, y:gaze.y, t:t});
-    // mantener solo ventana SAMPLE_WINDOW_MS
-    const cutoff = t - SAMPLE_WINDOW_MS;
-    fixPositions = fixPositions.filter(p => p.t >= cutoff);
-    const xs = fixPositions.map(p=>p.x - mean(fixPositions.map(q=>q.x)));
-    const ys = fixPositions.map(p=>p.y - mean(fixPositions.map(q=>q.y)));
-    const rmsVal = rms(xs.concat(ys));
-
-    // VOR gain aproximado: ratio eyeVel / headVel (módulo); en VOR esperado la ganancia ~1 (ojo contramovimiento)
-    let vorGain = null;
-    if (Math.abs(headVel) > 5) { // evitar división por cero
-      vorGain = Math.abs(eyeVel) / Math.abs(headVel);
-    }
-
-    // actualizar UI
-    document.getElementById('headVel').innerText = headVel ? headVel.toFixed(1) : '-';
-    document.getElementById('eyeVel').innerText = eyeVel ? Math.round(eyeVel) : '-';
-    document.getElementById('vorGain').innerText = vorGain ? vorGain.toFixed(2) : '-';
-    const latSamples = latencyEstimates.filter(e=>e.latencyMs).map(e=>e.latencyMs);
-    document.getElementById('latency').innerText = latSamples.length ? Math.round(mean(latSamples)) + ' ms' : '-';
-    document.getElementById('fixRMS').innerText = rmsVal ? Math.round(rmsVal) + ' px' : '-';
-
-    // guardar muestra si sesión activa
-    if (sessionActive) {
-      recorded.push({
-        t: t,
-        gazeX: gaze.x,
-        gazeY: gaze.y,
-        headAngle: headAngle,
-        headVel: headVel,
-        eyeVel: eyeVel,
-        vorGain: vorGain,
-        latencySamples: latSamples.slice(-5)
-      });
-      document.getElementById('btnExport').disabled = false;
-    }
-
-    // actualizar referencias previas
-    lastHeadAngle = headAngle;
-    lastGaze = gaze;
-    lastTimestamp = t;
-  };
-
-  function calculateVORMetrics(gaze, clock) {
-    const t = clock || performance.now();
-    frameCount++;
-    document.getElementById('frames').innerText = frameCount;
-
-    // Continuar con cálculos VOR existentes...
-    if (sessionActive) {
-      recorded.push({
-        t: t,
-        gazeX: gaze.x,
-        gazeY: gaze.y,
-        precision: 'high'
-      });
-    }
-  }
-
-  // ---------------------------
-  // Calibración avanzada (13 puntos)
-  // ---------------------------
-  function startAdvancedCalibration(){
-    const grid = document.getElementById('calibrationGrid');
-    grid.innerHTML = '';
-    grid.style.display = 'block';
-    
-    // 13 puntos para calibración de alta precisión
-    const points = [
-      [0.05,0.05],[0.25,0.05],[0.5,0.05],[0.75,0.05],[0.95,0.05],
-      [0.05,0.25],[0.5,0.25],[0.95,0.25],
-      [0.05,0.5],[0.5,0.5],[0.95,0.5],
-      [0.05,0.75],[0.5,0.75],[0.95,0.75],
-      [0.05,0.95],[0.25,0.95],[0.5,0.95],[0.75,0.95],[0.95,0.95]
-    ];
-    
-    let calibrationData = [];
-    let currentPoint = 0;
-    
-    document.getElementById('statusText').innerText = 'calibración de alta precisión: mira fijamente cada punto';
-    
-    function showNextCalibrationPoint() {
-      if (currentPoint >= points.length) {
-        computeCalibrationMatrix(calibrationData);
-        grid.style.display = 'none';
-        document.getElementById('statusText').innerText = 'calibración completada - precisión mejorada';
-        return;
-      }
-      
-      const p = points[currentPoint];
-      const el = document.createElement('div');
-      el.className = 'calPoint';
-      el.style.left = (p[0]*100) + '%';
-      el.style.top = (p[1]*100) + '%';
-      el.innerText = (currentPoint + 1);
-      el.style.background = '#ff0';
-      grid.appendChild(el);
-      
-      setTimeout(async () => {
-        el.style.background = '#0f0';
-        const samples = [];
-        const startTime = performance.now();
-        
-        // Recoger muestras durante 2 segundos
-        while (performance.now() - startTime < 2000) {
-          if (smoothedGaze.x > 0) {
-            samples.push({x: smoothedGaze.x, y: smoothedGaze.y});
-          }
-          await new Promise(r => setTimeout(r, 50));
-        }
-        
-        if (samples.length > 10) {
-          // Filtrar outliers y calcular promedio
-          const sortedX = samples.map(s => s.x).sort((a,b) => a-b);
-          const sortedY = samples.map(s => s.y).sort((a,b) => a-b);
-          const trim = Math.floor(samples.length * 0.15);
-          const avgX = sortedX.slice(trim, -trim).reduce((a,b) => a+b, 0) / (sortedX.length - 2*trim);
-          const avgY = sortedY.slice(trim, -trim).reduce((a,b) => a+b, 0) / (sortedY.length - 2*trim);
-          
-          calibrationData.push({
-            screen: {x: p[0] * window.innerWidth, y: p[1] * window.innerHeight},
-            gaze: {x: avgX, y: avgY}
-          });
-        }
-        
-        el.remove();
-        currentPoint++;
-        setTimeout(showNextCalibrationPoint, 500);
-      }, 1000);
-    }
-    
-    showNextCalibrationPoint();
-  }
-
-  function computeCalibrationMatrix(data) {
-    // Calcular matriz de transformación usando mínimos cuadrados
-    if (data.length < 6) return;
-    
-    let sumX = 0, sumY = 0, sumGX = 0, sumGY = 0;
-    let sumX2 = 0, sumY2 = 0, sumXY = 0;
-    let sumXGX = 0, sumYGX = 0, sumXGY = 0, sumYGY = 0;
-    
-    for (const point of data) {
-      const sx = point.screen.x, sy = point.screen.y;
-      const gx = point.gaze.x, gy = point.gaze.y;
-      
-      sumX += sx; sumY += sy; sumGX += gx; sumGY += gy;
-      sumX2 += sx*sx; sumY2 += sy*sy; sumXY += sx*sy;
-      sumXGX += sx*gx; sumYGX += sy*gx;
-      sumXGY += sx*gy; sumYGY += sy*gy;
-    }
-    
-    const n = data.length;
-    const det = n*(sumX2*sumY2 - sumXY*sumXY) - sumX*(sumX*sumY2 - sumY*sumXY) + sumY*(sumX*sumXY - sumY*sumX2);
-    
-    if (Math.abs(det) > 0.001) {
-      calibrationMatrix = {
-        a: (n*sumXGX - sumX*sumGX) / (n*sumX2 - sumX*sumX),
-        b: (n*sumYGX - sumY*sumGX) / (n*sumY2 - sumY*sumY),
-        c: (sumGX - calibrationMatrix?.a*sumX - calibrationMatrix?.b*sumY) / n,
-        d: (n*sumXGY - sumX*sumGY) / (n*sumX2 - sumX*sumX),
-        e: (n*sumYGY - sumY*sumGY) / (n*sumY2 - sumY*sumY),
-        f: (sumGY - calibrationMatrix?.d*sumX - calibrationMatrix?.e*sumY) / n
-      };
-    }
-  }
-
-  // ---------------------------
-  // Session control, export
-  // ---------------------------
-  function startSession(){
-    sessionActive = true;
-    recorded = [];
-    frameCount = 0;
-    saccCount = 0;
-    lastHeadAngle = null;
-    lastGaze = null;
-    lastTimestamp = null;
-    latencyEstimates = [];
-    fixPositions = [];
-    document.getElementById('btnStop').disabled = false;
-    document.getElementById('btnStart').disabled = true;
-    document.getElementById('statusText').innerText = 'sesión activa';
-    document.getElementById('saccCount').innerText = '0';
-  }
-
-  function stopSession(){
-    sessionActive = false;
-    document.getElementById('btnStop').disabled = true;
-    document.getElementById('btnStart').disabled = false;
-    document.getElementById('statusText').innerText = 'sesión detenida';
-    document.getElementById('btnExport').disabled = recorded.length === 0;
-  }
-
-  function exportCSV(){
-    if (!recorded || recorded.length === 0) return alert('No hay datos para exportar.');
-    const header = Object.keys(recorded[0]);
-    const csv = [header.join(',')].concat(
-      recorded.map(r => header.map(h => JSON.stringify(r[h]===undefined ? '' : r[h])).join(','))
-    ).join('\n');
-    const blob = new Blob([csv], {type: 'text/csv'});
-    const url = URL.createObjectURL(blob);
-    const link = document.getElementById('downloadLink');
-    link.href = url;
-    link.download = 'vor_session_' + (new Date()).toISOString().replace(/[:.]/g,'_') + '.csv';
-    link.style.display = 'inline-block';
-    link.click();
-    document.getElementById('btnExport').disabled = false;
-  }
-
-  function togglePreview(){
-    if (videoElement) {
-      videoElement.style.display = videoElement.style.display === 'none' ? 'block' : 'none';
-    }
-  }
-
-  // ---------------------------
-  // Buenas prácticas / warnings
-  // ---------------------------
-  // - Pedir permiso cámara (webgazer lo hace).
-  // - Ambiente bien iluminado y cámara fija.
-  // - Mantener distancia y registrar la resolución / tamaño de pantalla para comparar sesiones.
-  // - Los valores de umbral son heurísticos; ajustar en tests.
-  // ---------------------------
-
-  </script>
-</body>
-</html>
-
-  </script>
+  
+  <script src="js/config.js"></script>
+  <script src="js/eyetracking.js"></script>
+  <script src="js/exercises.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>
