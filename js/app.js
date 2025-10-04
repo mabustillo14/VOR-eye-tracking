@@ -9,15 +9,20 @@ class VORRehabilitationApp {
 
   async initialize() {
     try {
-      console.log('Initializing VOR Rehabilitation System...');
+      console.log('Initializing VOR Rehabilitation System with AI...');
       
-      // Initialize eye tracker
+      // Show loading message
+      this.showLoadingMessage('Cargando modelo de IA para seguimiento ocular...');
+      
+      // Initialize AI-based eye tracker
       this.eyeTracker = new EyeTracker();
       const eyeTrackerReady = await this.eyeTracker.initialize();
       
       if (!eyeTrackerReady) {
-        throw new Error('Failed to initialize eye tracking system');
+        throw new Error('Failed to initialize AI eye tracking system');
       }
+      
+      this.hideLoadingMessage();
 
       // Initialize exercise system
       this.exerciseSystem = new ExerciseSystem();
@@ -38,11 +43,60 @@ class VORRehabilitationApp {
       console.log('VOR Rehabilitation System initialized successfully');
       
       // Show welcome message
-      this.uiManager.showMessage('Sistema VOR inicializado. Calibre el sistema para comenzar.', 'success');
+      this.uiManager.showMessage('Sistema VOR con IA inicializado. Calibre el sistema para comenzar.', 'success');
       
     } catch (error) {
       console.error('Failed to initialize VOR Rehabilitation System:', error);
       this.showInitializationError(error.message);
+    }
+  }
+
+  showLoadingMessage(message) {
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'loadingMessage';
+    loadingDiv.innerHTML = `
+      <div style="
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #2196F3;
+        color: white;
+        padding: 30px;
+        border-radius: 10px;
+        text-align: center;
+        z-index: 10000;
+        max-width: 400px;
+      ">
+        <h3>Cargando Sistema IA</h3>
+        <p>${message}</p>
+        <div style="margin: 20px 0;">
+          <div style="
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+          "></div>
+        </div>
+        <p style="font-size: 14px; opacity: 0.8;">Esto puede tomar unos segundos...</p>
+      </div>
+      <style>
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      </style>
+    `;
+    document.body.appendChild(loadingDiv);
+  }
+
+  hideLoadingMessage() {
+    const loadingDiv = document.getElementById('loadingMessage');
+    if (loadingDiv) {
+      loadingDiv.remove();
     }
   }
 
@@ -62,13 +116,14 @@ class VORRehabilitationApp {
         z-index: 10000;
         max-width: 400px;
       ">
-        <h3>Error de Inicialización</h3>
+        <h3>Error de Inicialización IA</h3>
         <p>${message}</p>
         <p>Por favor, recargue la página y asegúrese de que:</p>
         <ul style="text-align: left; margin: 15px 0;">
           <li>Su cámara esté conectada y funcionando</li>
           <li>Haya otorgado permisos de cámara al navegador</li>
           <li>Esté usando un navegador compatible (Chrome, Firefox, Edge)</li>
+          <li>Tenga una conexión a internet estable</li>
         </ul>
         <button onclick="location.reload()" style="
           background: white;
