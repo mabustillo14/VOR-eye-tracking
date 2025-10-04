@@ -2,8 +2,9 @@ html, body {
   height: 100%;
   margin: 0;
   font-family: Arial, Helvetica, sans-serif;
-  background: #111;
+  background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
   color: #eee;
+  overflow-x: hidden;
 }
 
 #ui {
@@ -194,6 +195,52 @@ svg {
   0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 30px rgba(255, 107, 107, 0.8); }
   50% { transform: translate(-50%, -50%) scale(1.2); box-shadow: 0 0 40px rgba(255, 107, 107, 1); }
   100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 30px rgba(255, 107, 107, 0.8); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(-100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(76, 175, 80, 0.5); }
+  50% { box-shadow: 0 0 20px rgba(76, 175, 80, 0.8); }
+}
+
+.level-btn {
+  animation: fadeInUp 0.5s ease-out;
+  transition: all 0.3s ease;
+}
+
+.level-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.level-btn.completed {
+  animation: glow 2s infinite;
+}
+
+.modal-content {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.progress-fill {
+  background: linear-gradient(90deg, #4CAF50, #8BC34A, #CDDC39);
+  animation: slideIn 0.5s ease-out;
+}
+
+.target {
+  transition: all 0.3s ease;
+}
+
+.instruction-overlay {
+  animation: fadeInUp 0.5s ease-out;
 }
 
 .gaze-indicator {

@@ -127,14 +127,15 @@ class MetricsCalculator {
       const avgLatency = latSamples.length > 0 ? latSamples.reduce((a,b) => a+b, 0) / latSamples.length : null;
       const rmsVal = this.calculateFixationStability(gaze, t);
       
-      // Calculate accuracy (distance from target)
+      // Calculate precision using WebGazer's method
       const targetDistance = Math.sqrt(
         Math.pow(gaze.x - STATE.currentTargetPosition.x, 2) + 
         Math.pow(gaze.y - STATE.currentTargetPosition.y, 2)
       );
       
-      // Simple accuracy coefficient (inverse of distance, normalized)
-      const accuracyCoeff = Math.max(0, 1 - (targetDistance / 200));
+      // WebGazer precision: percentage based on screen diagonal
+      const screenDiagonal = Math.sqrt(Math.pow(window.innerWidth, 2) + Math.pow(window.innerHeight, 2));
+      const accuracyCoeff = Math.max(0, (1 - (targetDistance / screenDiagonal)) * 100);
       
       STATE.recorded.push({
         timestamp: t,

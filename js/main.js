@@ -36,16 +36,32 @@ class VORApp {
     // Level selection
     document.querySelectorAll('.level-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
+        audioManager.playSound('buttonClick');
         const level = parseInt(e.target.dataset.level);
         levelManager.selectLevel(level);
       });
     });
 
     // Control buttons
-    document.getElementById('btnCalibrate').onclick = () => calibrationManager.startCalibration();
-    document.getElementById('btnStart').onclick = () => this.startSession();
-    document.getElementById('btnStop').onclick = () => this.stopSession();
-    document.getElementById('btnExport').onclick = () => this.exportCSV();
+    document.getElementById('btnCalibrate').onclick = () => {
+      audioManager.playSound('buttonClick');
+      calibrationManager.startCalibration();
+    };
+    document.getElementById('btnStart').onclick = () => {
+      audioManager.playSound('sessionStart');
+      this.startSession();
+    };
+    document.getElementById('btnStop').onclick = () => {
+      audioManager.playSound('buttonClick');
+      this.stopSession();
+    };
+    document.getElementById('btnExport').onclick = () => {
+      audioManager.playSound('buttonClick');
+      this.exportCSV();
+    };
+    document.getElementById('btnMusic').onclick = () => {
+      audioManager.toggleMusic();
+    };
   }
 
   async gazeListener(data, clock) {
@@ -151,12 +167,18 @@ class VORApp {
 
 // Initialize application when page loads
 window.onload = async function() {
+  // Initialize audio system
+  await audioManager.initialize();
+  
   // Show startup checks first
   await startupManager.initialize();
   
   // Then initialize the main app
   const app = new VORApp();
   await app.initialize();
+  
+  // Start background music
+  audioManager.startBackgroundMusic();
 };
 
 window.onbeforeunload = function() {
