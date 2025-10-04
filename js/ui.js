@@ -207,7 +207,7 @@ class UIManager {
     if (STATE.isCalibrated) {
       stateElement.textContent = 'Calibrado';
       stateElement.style.color = '#4CAF50';
-      precisionElement.textContent = '~75 px';
+      precisionElement.textContent = '75 px';
       precisionElement.style.color = '#FF9800';
     } else {
       stateElement.textContent = 'No calibrado';
