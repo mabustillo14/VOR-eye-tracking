@@ -23,6 +23,13 @@ class UIManager {
     // Modal buttons
     document.getElementById('btnExport')?.addEventListener('click', () => this.exportData());
     document.getElementById('btnNewSession')?.addEventListener('click', () => this.newSession());
+    
+    // Calibration precision buttons (added dynamically)
+    document.addEventListener('click', (e) => {
+      if (e.target.id === 'btnAcceptCalibration' || e.target.id === 'btnRecalibrate') {
+        // Handled by eye tracker
+      }
+    });
 
     // Close modal when clicking outside
     document.getElementById('resultsModal')?.addEventListener('click', (e) => {
@@ -174,6 +181,29 @@ class UIManager {
     document.querySelectorAll('.exercise-btn').forEach(btn => {
       btn.disabled = isRunning;
     });
+    
+    // Update calibration status
+    this.updateCalibrationStatus();
+  }
+
+  updateCalibrationStatus() {
+    const stateElement = document.getElementById('calibrationState');
+    const precisionElement = document.getElementById('currentPrecision');
+    
+    if (STATE.isCalibrated) {
+      stateElement.textContent = 'Calibrado';
+      stateElement.style.color = '#4CAF50';
+      if (STATE.eyeTracker && STATE.eyeTracker.currentPrecision) {
+        precisionElement.textContent = Math.round(STATE.eyeTracker.currentPrecision) + ' px';
+        precisionElement.style.color = STATE.eyeTracker.currentPrecision < 50 ? '#4CAF50' : 
+                                      STATE.eyeTracker.currentPrecision < 100 ? '#FF9800' : '#f44336';
+      }
+    } else {
+      stateElement.textContent = 'No calibrado';
+      stateElement.style.color = '#f44336';
+      precisionElement.textContent = '-';
+      precisionElement.style.color = '#B0BEC5';
+    }
   }
 
   setButtonState(buttonId, enabled, text = null) {

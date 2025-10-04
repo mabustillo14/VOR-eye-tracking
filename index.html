@@ -39,6 +39,20 @@
           <button id="btnPause" class="btn-warning" disabled>Pausar</button>
           <button id="btnStop" class="btn-danger" disabled>Detener</button>
         </div>
+        
+        <div class="calibration-info">
+          <h4>Estado de Calibración</h4>
+          <div class="calibration-status">
+            <div class="status-item">
+              <label>Estado:</label>
+              <span id="calibrationState" class="status-value">No calibrado</span>
+            </div>
+            <div class="status-item">
+              <label>Precisión:</label>
+              <span id="currentPrecision" class="status-value">-</span>
+            </div>
+          </div>
+        </div>
 
         <div class="metrics-panel">
           <h4>Métricas en Tiempo Real</h4>
@@ -78,11 +92,22 @@
     <!-- Calibration Overlay -->
     <div id="calibrationOverlay" class="calibration-overlay">
       <div class="calibration-content">
-        <h2>Calibración del Sistema</h2>
-        <p>Mira fijamente cada punto que aparezca y mantén la mirada durante 2 segundos.</p>
+        <h2 id="calibrationTitle">Calibración del Sistema</h2>
+        <p id="calibrationInstructions">Mira fijamente cada punto que aparezca y mantén la mirada durante 2 segundos.</p>
         <div id="calibrationGrid" class="calibration-grid"></div>
         <div class="calibration-progress">
           <span id="calibrationStatus">Preparando calibración...</span>
+          <div id="precisionResults" class="precision-results" style="display:none;">
+            <h3>Resultados de Precisión</h3>
+            <div class="precision-metric">
+              <label>Precisión Promedio:</label>
+              <span id="avgPrecision" class="precision-value">-</span>
+            </div>
+            <div class="precision-actions">
+              <button id="btnAcceptCalibration" class="btn-success">Aceptar Calibración</button>
+              <button id="btnRecalibrate" class="btn-warning">Recalibrar</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
