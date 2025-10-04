@@ -9,7 +9,10 @@ class CalibrationManager {
   }
 
   startCalibration() {
+    const overlay = document.getElementById('calibrationOverlay');
     const grid = document.getElementById('calibrationGrid');
+    
+    overlay.style.display = 'block';
     grid.innerHTML = '';
     grid.style.display = 'block';
     
@@ -57,6 +60,7 @@ class CalibrationManager {
     button.style.transform = 'translateX(-50%)';
     
     button.onclick = () => {
+      document.getElementById('calibrationOverlay').style.display = 'none';
       document.getElementById('calibrationGrid').style.display = 'none';
       document.getElementById('statusText').innerText = 'calibración completada';
     };

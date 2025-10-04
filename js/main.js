@@ -151,6 +151,10 @@ class VORApp {
 
 // Initialize application when page loads
 window.onload = async function() {
+  // Show startup checks first
+  await startupManager.initialize();
+  
+  // Then initialize the main app
   const app = new VORApp();
   await app.initialize();
 };
