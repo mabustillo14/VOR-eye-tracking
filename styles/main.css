@@ -56,8 +56,9 @@ html, body {
 }
 
 .level-btn.active {
-  background: #0a5c2b;
-  border-color: #0f7a36;
+  background: #1e40af;
+  border-color: #3b82f6;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
 }
 
 .level-btn.completed {
@@ -74,6 +75,15 @@ html, body {
   transform: translateY(-50%);
   color: #22c55e;
   font-weight: bold;
+}
+
+.level-btn.completed.active {
+  background: #1e40af;
+  border-color: #3b82f6;
+}
+
+.level-btn.completed.active::after {
+  color: #60a5fa;
 }
 
 #controls button {
@@ -198,8 +208,8 @@ svg {
 }
 
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(30px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(30px) scale(0.9); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes slideIn {
@@ -227,7 +237,8 @@ svg {
 }
 
 .modal-content {
-  animation: fadeInUp 0.6s ease-out;
+  animation: fadeInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  will-change: transform, opacity;
 }
 
 .progress-fill {
@@ -240,7 +251,8 @@ svg {
 }
 
 .instruction-overlay {
-  animation: fadeInUp 0.5s ease-out;
+  animation: fadeInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  will-change: transform, opacity;
 }
 
 .gaze-indicator {

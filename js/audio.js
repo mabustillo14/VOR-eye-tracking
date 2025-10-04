@@ -18,25 +18,7 @@ class AudioManager {
   }
 
   createBackgroundMusic() {
-    if (!this.audioContext) return;
-    
-    // Create ambient background music using Web Audio API
-    const oscillator1 = this.audioContext.createOscillator();
-    const oscillator2 = this.audioContext.createOscillator();
-    const gainNode = this.audioContext.createGain();
-    
-    oscillator1.type = 'sine';
-    oscillator1.frequency.setValueAtTime(220, this.audioContext.currentTime);
-    oscillator2.type = 'sine';
-    oscillator2.frequency.setValueAtTime(330, this.audioContext.currentTime);
-    
-    gainNode.gain.setValueAtTime(0.05, this.audioContext.currentTime);
-    
-    oscillator1.connect(gainNode);
-    oscillator2.connect(gainNode);
-    gainNode.connect(this.audioContext.destination);
-    
-    this.backgroundMusic = { oscillator1, oscillator2, gainNode };
+    // Background music removed
   }
 
   createSoundEffects() {
@@ -67,25 +49,11 @@ class AudioManager {
   }
 
   startBackgroundMusic() {
-    if (!this.backgroundMusic || !this.musicEnabled) return;
-    
-    try {
-      this.backgroundMusic.oscillator1.start();
-      this.backgroundMusic.oscillator2.start();
-    } catch (error) {
-      // Already started
-    }
+    // Background music removed
   }
 
   stopBackgroundMusic() {
-    if (!this.backgroundMusic) return;
-    
-    try {
-      this.backgroundMusic.oscillator1.stop();
-      this.backgroundMusic.oscillator2.stop();
-    } catch (error) {
-      // Already stopped
-    }
+    // Background music removed
   }
 
   playSound(soundName) {
@@ -94,14 +62,7 @@ class AudioManager {
     }
   }
 
-  toggleMusic() {
-    this.musicEnabled = !this.musicEnabled;
-    if (this.musicEnabled) {
-      this.startBackgroundMusic();
-    } else {
-      this.stopBackgroundMusic();
-    }
-  }
+
 }
 
 // Global audio manager instance

@@ -59,9 +59,6 @@ class VORApp {
       audioManager.playSound('buttonClick');
       this.exportCSV();
     };
-    document.getElementById('btnMusic').onclick = () => {
-      audioManager.toggleMusic();
-    };
   }
 
   async gazeListener(data, clock) {
@@ -177,8 +174,7 @@ window.onload = async function() {
   const app = new VORApp();
   await app.initialize();
   
-  // Start background music
-  audioManager.startBackgroundMusic();
+
 };
 
 window.onbeforeunload = function() {
