@@ -160,6 +160,10 @@ class LevelManager {
       this.targetElement.style.left = x + '%';
       this.targetElement.style.top = y + '%';
       
+      // Update target position for analytics
+      STATE.currentTargetPosition.x = (x / 100) * window.innerWidth;
+      STATE.currentTargetPosition.y = (y / 100) * window.innerHeight;
+      
       if (elapsed < duration && STATE.sessionActive) {
         requestAnimationFrame(animate);
       } else if (STATE.sessionActive) {
@@ -197,6 +201,13 @@ class LevelManager {
     }
     
     document.getElementById('progress').style.display = 'none';
+    
+    // Mark level as completed
+    STATE.completedLevels.add(STATE.currentLevel);
+    const levelBtn = document.querySelector(`[data-level="${STATE.currentLevel}"]`);
+    if (levelBtn) {
+      levelBtn.classList.add('completed');
+    }
     
     const completion = document.createElement('div');
     completion.className = 'instruction-overlay';

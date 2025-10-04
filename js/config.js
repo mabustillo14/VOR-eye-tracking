@@ -12,6 +12,7 @@ const CONFIG = {
 const STATE = {
   sessionActive: false,
   currentLevel: null,
+  completedLevels: new Set(),
   recorded: [],
   frameCount: 0,
   saccCount: 0,
@@ -22,7 +23,8 @@ const STATE = {
   fixPositions: [],
   webgazerCanvas: null,
   force: null,
-  nodes: []
+  nodes: [],
+  currentTargetPosition: { x: 0, y: 0 }
 };
 
 // Utility functions

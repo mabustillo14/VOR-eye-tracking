@@ -59,6 +59,22 @@ html, body {
   border-color: #0f7a36;
 }
 
+.level-btn.completed {
+  background: #1a472a;
+  border-color: #22c55e;
+  position: relative;
+}
+
+.level-btn.completed::after {
+  content: '✓';
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #22c55e;
+  font-weight: bold;
+}
+
 #controls button {
   margin: 6px 6px 6px 0;
   padding: 8px 10px;

@@ -127,12 +127,25 @@ class MetricsCalculator {
       const avgLatency = latSamples.length > 0 ? latSamples.reduce((a,b) => a+b, 0) / latSamples.length : null;
       const rmsVal = this.calculateFixationStability(gaze, t);
       
+      // Calculate accuracy (distance from target)
+      const targetDistance = Math.sqrt(
+        Math.pow(gaze.x - STATE.currentTargetPosition.x, 2) + 
+        Math.pow(gaze.y - STATE.currentTargetPosition.y, 2)
+      );
+      
+      // Simple accuracy coefficient (inverse of distance, normalized)
+      const accuracyCoeff = Math.max(0, 1 - (targetDistance / 200));
+      
       STATE.recorded.push({
         timestamp: t,
         nivel: STATE.currentLevel,
         nombreNivel: LEVELS[STATE.currentLevel]?.name || 'Desconocido',
+        objetivoX: Math.round(STATE.currentTargetPosition.x * 100) / 100,
+        objetivoY: Math.round(STATE.currentTargetPosition.y * 100) / 100,
         miradaX: Math.round(gaze.x * 100) / 100,
         miradaY: Math.round(gaze.y * 100) / 100,
+        distanciaObjetivo: Math.round(targetDistance * 100) / 100,
+        coeficientePrecision: Math.round(accuracyCoeff * 1000) / 1000,
         anguloCabeza: headAngle ? Math.round(headAngle * 100) / 100 : null,
         velocidadCabeza: Math.round(headVel * 100) / 100,
         velocidadOjo: Math.round(eyeVel * 100) / 100,
