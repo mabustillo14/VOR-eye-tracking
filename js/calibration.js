@@ -9,6 +9,47 @@ class CalibrationManager {
   }
 
   startCalibration() {
+    this.showCalibrationInstructions();
+  }
+
+  showCalibrationInstructions() {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-content">
+        <h2>Instrucciones de Calibración</h2>
+        <div style="text-align: left; max-width: 500px; margin: 20px auto;">
+          <h3>Preparación:</h3>
+          <ul>
+            <li>Siéntese cómodamente frente a la pantalla</li>
+            <li>Mantenga una distancia de 60-80cm</li>
+            <li>Asegúrese de que su rostro esté bien iluminado</li>
+            <li>Evite movimientos bruscos durante la calibración</li>
+          </ul>
+          
+          <h3>Proceso:</h3>
+          <ul>
+            <li>Aparecerán 9 puntos numerados en la pantalla</li>
+            <li>Haga clic en cada punto en orden</li>
+            <li>Mire fijamente el punto durante 1.5 segundos</li>
+            <li>El punto cambiará de color cuando termine</li>
+          </ul>
+          
+          <h3>Importante:</h3>
+          <p><strong>Mantenga la cabeza quieta y solo mueva los ojos para mirar cada punto.</strong></p>
+        </div>
+        
+        <button onclick="calibrationManager.beginCalibration()">Comenzar Calibración</button>
+        <button onclick="this.parentElement.parentElement.remove()">Cancelar</button>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  beginCalibration() {
+    // Remove instruction modal
+    document.querySelector('.modal').remove();
+    
     const overlay = document.getElementById('calibrationOverlay');
     const grid = document.getElementById('calibrationGrid');
     
@@ -37,11 +78,11 @@ class CalibrationManager {
     element.onclick = async () => {
       element.style.background = '#0f0';
       const startTime = performance.now();
-      const samples = [];
+      const targetX = point[0] * window.innerWidth;
+      const targetY = point[1] * window.innerHeight;
       
       while (performance.now() - startTime < 1200) {
-        const prediction = await webgazer.getCurrentPrediction();
-        if (prediction) samples.push(prediction);
+        webgazer.recordScreenPosition(targetX, targetY);
         await new Promise(resolve => setTimeout(resolve, 80));
       }
       
