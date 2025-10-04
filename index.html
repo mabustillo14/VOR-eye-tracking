@@ -72,22 +72,18 @@
   let frameCount = 0;
   let saccCount = 0;
 
-  // Para cálculos temporales con filtrado
+  // Para cálculos temporales
   let lastHeadAngle = null;
   let lastGaze = null;
   let lastTimestamp = null;
   let latencyEstimates = [];
   let fixPositions = [];
-  let gazeHistory = []; // historial para suavizado
-  let calibrationPoints = []; // puntos de calibración mejorados
-  let smoothedGaze = {x: 0, y: 0}; // gaze filtrado
 
   // Parámetros optimizados para mayor precisión
   const SACCADE_VEL_THRESHOLD = 800; // reducido para mejor detección
-  const SAMPLE_WINDOW_MS = 200; // ventana más amplia para estabilidad
-  const KALMAN_NOISE_Q = 0.01; // ruido del proceso
-  const KALMAN_NOISE_R = 0.1;  // ruido de medición
-  const SMOOTHING_FACTOR = 0.3; // filtro exponencial
+  const SAMPLE_WINDOW_MS = 150; // ventana más amplia para estabilidad
+  const SMOOTHING_FACTOR = 0.2; // filtro suavizado
+  let smoothedGaze = {x: 0, y: 0};
 
   // Vectores para promedio
   function mean(arr){ return arr.reduce((a,b)=>a+b,0)/Math.max(arr.length,1); }
@@ -104,16 +100,14 @@
         localforage.setItem(localstorageSettingsLabel, null);
     }
 
-    // Inicializa webgazer con configuración optimizada
+    // Inicializa webgazer
     const webgazerInstance = await webgazer.setRegression('ridge')
       .setTracker('TFFacemesh')
       .begin();
 
     webgazerInstance.showVideoPreview(true)
       .showPredictionPoints(false)
-      .applyKalmanFilter(true)
-      .params.showFaceOverlay = false
-      .params.showFaceFeedbackBox = false;
+      .applyKalmanFilter(true);
 
     // UI bindings
     document.getElementById('statusText').innerText = 'listo para calibrar';
@@ -246,227 +240,17 @@
   // Listener principal: recibe data de gaze y calcula métricas
   // ---------------------------
   var collisionEyeListener = async function(data, clock) {
-    if(!data || data.x < 0 || data.y < 0) return;
-    
-    // Filtrado exponencial para suavizar gaze
-    if (gazeHistory.length === 0) {
-      smoothedGaze = {x: data.x, y: data.y};
-    } else {
-      smoothedGaze.x = SMOOTHING_FACTOR * data.x + (1 - SMOOTHING_FACTOR) * smoothedGaze.x;
-      smoothedGaze.y = SMOOTHING_FACTOR * data.y + (1 - SMOOTHING_FACTOR) * smoothedGaze.y;
-    }
-    
-    gazeHistory.push({x: data.x, y: data.y, t: clock || performance.now()});
-    if (gazeHistory.length > 10) gazeHistory.shift();
-
-    // actualiza colisión con gaze suavizado
-    nodes[0].px = smoothedGaze.x;
-    nodes[0].py = smoothedGaze.y;
-    force.resume();
-
-    if (!webgazerCanvas) {
-      webgazerCanvas = webgazer.getVideoElementCanvas();
-    }
-
-    var fmPositions = await webgazer.getTracker().getPositions();
-    if (!fmPositions) return;
-
-    var whr = webgazer.getVideoPreviewToCameraResolutionRatio();
-
-    try {
-      var leftEye = fmPositions[145];
-      var rightEye = fmPositions[374];
-      var leftX = previewWidth - leftEye[0] * whr[0];
-      var leftY = leftEye[1] * whr[1];
-      var rightX = previewWidth - rightEye[0] * whr[0];
-      var rightY = rightEye[1] * whr[1];
-
-      d3.select('#eyeline1')
-        .attr("x1",smoothedGaze.x)
-        .attr("y1",smoothedGaze.y)
-        .attr("x2", leftX)
-        .attr("y2", leftY);
-
-      d3.select("#eyeline2")
-        .attr("x1",smoothedGaze.x)
-        .attr("y1",smoothedGaze.y)
-        .attr("x2", rightX)
-        .attr("y2", rightY);
-    } catch (e){}
-
-    d3.select("#predictionSquare")
-      .attr("x",smoothedGaze.x)
-      .attr("y",smoothedGaze.y);
-
-    const t = clock || performance.now();
-    frameCount++;
-    document.getElementById('frames').innerText = frameCount;
-
-    const gaze = { x: smoothedGaze.x, y: smoothedGaze.y, t: t };
-
-    // head orientation mejorado
-    let headAngle = null;
-    try {
-      const noseTip = fmPositions[1];
-      const leftEyeOuter = fmPositions[33];
-      const rightEyeOuter = fmPositions[263];
-      
-      if (noseTip && leftEyeOuter && rightEyeOuter) {
-        const eyeCenterX = (leftEyeOuter[0] + rightEyeOuter[0]) / 2;
-        const eyeCenterY = (leftEyeOuter[1] + rightEyeOuter[1]) / 2;
-        const faceVectorX = noseTip[0] - eyeCenterX;
-        const faceVectorY = noseTip[1] - eyeCenterY;
-        headAngle = Math.atan2(faceVectorX, faceVectorY) * 180 / Math.PI;
-      }
-    } catch(e) {}
-
-    let headVel = 0;
-    let eyeVel = 0;
-    if (lastTimestamp !== null) {
-      const dt = (t - lastTimestamp)/1000.0;
-      if (headAngle !== null && lastHeadAngle !== null && dt > 0) {
-        headVel = (headAngle - lastHeadAngle) / dt;
-      }
-      if (lastGaze !== null) {
-        const dx = (gaze.x - lastGaze.x);
-        const dy = (gaze.y - lastGaze.y);
-        eyeVel = Math.sqrt(dx*dx + dy*dy) / dt;
-      }
-    }
-
-    if (Math.abs(eyeVel) > SACCADE_VEL_THRESHOLD) {
-      saccCount++;
-      document.getElementById('saccCount').innerText = saccCount;
-    }
-
-    fixPositions.push({x:gaze.x, y:gaze.y, t:t});
-    const cutoff = t - SAMPLE_WINDOW_MS;
-    fixPositions = fixPositions.filter(p => p.t >= cutoff);
-    const xs = fixPositions.map(p=>p.x - mean(fixPositions.map(q=>q.x)));
-    const ys = fixPositions.map(p=>p.y - mean(fixPositions.map(q=>q.y)));
-    const rmsVal = rms(xs.concat(ys));
-
-    let vorGain = null;
-    if (Math.abs(headVel) > 5) {
-      vorGain = Math.abs(eyeVel) / Math.abs(headVel);
-    }
-
-    document.getElementById('headVel').innerText = headVel ? headVel.toFixed(1) : '-';
-    document.getElementById('eyeVel').innerText = eyeVel ? Math.round(eyeVel) : '-';
-    document.getElementById('vorGain').innerText = vorGain ? vorGain.toFixed(2) : '-';
-    document.getElementById('fixRMS').innerText = rmsVal ? Math.round(rmsVal) + ' px' : '-';
-
-    if (sessionActive) {
-      recorded.push({
-        t: t,
-        gazeX: gaze.x,
-        gazeY: gaze.y,
-        headAngle: headAngle,
-        headVel: headVel,
-        eyeVel: eyeVel,
-        vorGain: vorGain
-      });
-      document.getElementById('btnExport').disabled = false;
-    }
-
-    lastHeadAngle = headAngle;
-    lastGaze = gaze;
-    lastTimestamp = t;
-  };
-
-  function startCalibration(){
-    const grid = document.getElementById('calibrationGrid');
-    grid.innerHTML = '';
-    grid.style.display = 'block';
-    const points = [
-      [0.1,0.1],[0.5,0.1],[0.9,0.1],
-      [0.1,0.5],[0.5,0.5],[0.9,0.5],
-      [0.1,0.9],[0.5,0.9],[0.9,0.9]
-    ];
-    document.getElementById('statusText').innerText = 'calibrando: haz click en cada punto';
-    points.forEach((p,i) => {
-      const el = document.createElement('div');
-      el.className = 'calPoint';
-      el.style.left = (p[0]*100) + '%';
-      el.style.top  = (p[1]*100) + '%';
-      el.innerText = (i+1);
-      el.onclick = async function(){
-        el.style.background = '#0f0';
-        await new Promise(r=>setTimeout(r,1000));
-        webgazer.recordScreenPosition(p[0] * window.innerWidth, p[1] * window.innerHeight, 'click');
-        el.style.background = '#0af';
-      };
-      grid.appendChild(el);
-    });
-
-    const end = document.createElement('button');
-    end.innerText = 'Finalizar calibración';
-    end.style.position='absolute';
-    end.style.left='50%';
-    end.style.bottom='6%';
-    end.style.transform='translateX(-50%)';
-    end.onclick = function(){
-      grid.style.display='none';
-      document.getElementById('statusText').innerText = 'calibración finalizada';
-    };
-    grid.appendChild(end);
-  }
-
-  function startSession(){
-    sessionActive = true;
-    recorded = [];
-    frameCount = 0;
-    saccCount = 0;
-    document.getElementById('btnStop').disabled = false;
-    document.getElementById('btnStart').disabled = true;
-    document.getElementById('statusText').innerText = 'sesión activa';
-  }
-
-  function stopSession(){
-    sessionActive = false;
-    document.getElementById('btnStop').disabled = true;
-    document.getElementById('btnStart').disabled = false;
-    document.getElementById('statusText').innerText = 'sesión detenida';
-  }
-
-  function exportCSV(){
-    if (!recorded || recorded.length === 0) return alert('No hay datos para exportar.');
-    const header = Object.keys(recorded[0]);
-    const csv = [header.join(',')].concat(
-      recorded.map(r => header.map(h => JSON.stringify(r[h]===undefined ? '' : r[h])).join(','))
-    ).join('\n');
-    const blob = new Blob([csv], {type: 'text/csv'});
-    const url = URL.createObjectURL(blob);
-    const link = document.getElementById('downloadLink');
-    link.href = url;
-    link.download = 'vor_session_' + (new Date()).toISOString().replace(/[:.]/g,'_') + '.csv';
-    link.style.display = 'inline-block';
-    link.click();
-  }
-
-  function togglePreview(){
-    const current = webgazer.params.showVideoPreview;
-    webgazer.showVideoPreview(!current);
-  }
-
-  </script>
-</body>
-</html>var collisionEyeListener = async function(data, clock) {
     // data: {x, y} (predicción de mirada en coordenadas de pantalla)
     // clock: timestamp ms
-    if(!data || data.x < 0 || data.y < 0) return;
-    
-    // Filtrado exponencial para suavizar gaze
-    if (gazeHistory.length === 0) {
+    if(!data) return;
+
+    // Suavizado exponencial para mayor precisión
+    if (smoothedGaze.x === 0) {
       smoothedGaze = {x: data.x, y: data.y};
     } else {
       smoothedGaze.x = SMOOTHING_FACTOR * data.x + (1 - SMOOTHING_FACTOR) * smoothedGaze.x;
       smoothedGaze.y = SMOOTHING_FACTOR * data.y + (1 - SMOOTHING_FACTOR) * smoothedGaze.y;
     }
-    
-    // Mantener historial limitado
-    gazeHistory.push({x: data.x, y: data.y, t: clock || performance.now()});
-    if (gazeHistory.length > 10) gazeHistory.shift();
 
     // actualiza colisión con gaze suavizado
     nodes[0].px = smoothedGaze.x;
@@ -523,31 +307,26 @@
     // gaze (predicción) actual suavizado
     const gaze = { x: smoothedGaze.x, y: smoothedGaze.y, t: t };
 
-    // head orientation mejorado con múltiples landmarks
-    let headAngle = null;
+    // head orientation estimado por la malla: usamos vector entre ojos y nariz para aproximar yaw
+    let headAngle = null; // grados
     try {
-      // Usar más puntos para mayor precisión
-      const noseTip = fmPositions[1];
-      const leftEyeOuter = fmPositions[33];
-      const rightEyeOuter = fmPositions[263];
-      const leftEyeInner = fmPositions[133];
-      const rightEyeInner = fmPositions[362];
-      
-      if (noseTip && leftEyeOuter && rightEyeOuter && leftEyeInner && rightEyeInner) {
-        // Calcular centro facial más preciso
-        const eyeCenterX = (leftEyeOuter[0] + rightEyeOuter[0] + leftEyeInner[0] + rightEyeInner[0]) / 4;
-        const eyeCenterY = (leftEyeOuter[1] + rightEyeOuter[1] + leftEyeInner[1] + rightEyeInner[1]) / 4;
-        
-        // Vector de orientación facial
-        const faceVectorX = noseTip[0] - eyeCenterX;
-        const faceVectorY = noseTip[1] - eyeCenterY;
-        
-        // Ángulo de yaw más preciso
-        headAngle = Math.atan2(faceVectorX, faceVectorY) * 180 / Math.PI;
-        
-        // Normalizar ángulo
-        if (headAngle > 180) headAngle -= 360;
-        if (headAngle < -180) headAngle += 360;
+      const nosePt = fmPositions[1] || fmPositions[4];
+      const left = fmPositions[33] || fmPositions[145];
+      const right = fmPositions[263] || fmPositions[374];
+      if (nosePt && left && right) {
+        // coordenadas relacionadas con preview ratio
+        const nx = previewWidth - nosePt[0] * whr[0];
+        const ny = nosePt[1] * whr[1];
+        const lx = previewWidth - left[0] * whr[0];
+        const rx = previewWidth - right[0] * whr[0];
+        // eje horizontal: vector entre ojos
+        const midEyesX = (lx + rx)/2;
+        const midEyesY = ( (left[1] + right[1]) / 2 ) * whr[1];
+        // vector nose <- midEyes
+        const vx = nx - midEyesX;
+        const vy = ny - midEyesY;
+        // angle in radians relative to vertical (approx yaw/pitch mixture)
+        headAngle = Math.atan2(vx, vy) * 180 / Math.PI; // signo y orientación arbitraria
       }
     } catch(e) {
       headAngle = null;
@@ -640,88 +419,49 @@
     const grid = document.getElementById('calibrationGrid');
     grid.innerHTML = '';
     grid.style.display = 'block';
-    calibrationPoints = [];
-    
-    // Puntos de calibración más distribuidos para mejor precisión
+    const w = window.innerWidth, h = window.innerHeight;
     const points = [
-      [0.05,0.05],[0.5,0.05],[0.95,0.05],
-      [0.05,0.3],[0.25,0.25],[0.5,0.3],[0.75,0.25],[0.95,0.3],
-      [0.05,0.5],[0.5,0.5],[0.95,0.5],
-      [0.05,0.7],[0.25,0.75],[0.5,0.7],[0.75,0.75],[0.95,0.7],
-      [0.05,0.95],[0.5,0.95],[0.95,0.95]
+      [0.1,0.1],[0.5,0.1],[0.9,0.1],
+      [0.1,0.5],[0.5,0.5],[0.9,0.5],
+      [0.1,0.9],[0.5,0.9],[0.9,0.9]
     ];
-    
-    let currentPoint = 0;
-    document.getElementById('statusText').innerText = 'calibrando: mira fijamente cada punto por 2 segundos';
-    
-    function showNextPoint() {
-      if (currentPoint >= points.length) {
-        finishCalibration();
-        return;
-      }
-      
-      const p = points[currentPoint];
+    let idx = 0;
+    document.getElementById('statusText').innerText = 'calibrando: haz click en cada punto y mira fijamente 1.5s';
+    points.forEach((p,i) => {
       const el = document.createElement('div');
       el.className = 'calPoint';
       el.style.left = (p[0]*100) + '%';
-      el.style.top = (p[1]*100) + '%';
-      el.innerText = (currentPoint + 1);
-      el.style.background = '#ff0';
-      grid.appendChild(el);
-      
-      // Auto-calibración mejorada
-      setTimeout(async () => {
+      el.style.top  = (p[1]*100) + '%';
+      el.innerText = (i+1);
+      el.onclick = async function(){
+        // esperar 1200ms de fijación
         el.style.background = '#0f0';
+        const t0 = performance.now();
         const samples = [];
-        const startTime = performance.now();
-        
-        // Recoger muestras durante 2 segundos
-        while (performance.now() - startTime < 2000) {
+        while (performance.now() - t0 < 1200) {
           const pred = await webgazer.getCurrentPrediction();
-          if (pred && pred.x > 0 && pred.y > 0) {
-            samples.push({x: pred.x, y: pred.y});
-          }
-          await new Promise(r => setTimeout(r, 50));
+          if (pred) samples.push(pred);
+          await new Promise(r=>setTimeout(r,80));
         }
-        
-        // Calcular punto promedio filtrado
-        if (samples.length > 5) {
-          // Remover outliers (10% superior e inferior)
-          const sortedX = samples.map(s => s.x).sort((a,b) => a-b);
-          const sortedY = samples.map(s => s.y).sort((a,b) => a-b);
-          const trimCount = Math.floor(samples.length * 0.1);
-          const trimmedX = sortedX.slice(trimCount, -trimCount);
-          const trimmedY = sortedY.slice(trimCount, -trimCount);
-          
-          const avgX = trimmedX.reduce((a,b) => a+b, 0) / trimmedX.length;
-          const avgY = trimmedY.reduce((a,b) => a+b, 0) / trimmedY.length;
-          
-          calibrationPoints.push({
-            screen: {x: p[0] * window.innerWidth, y: p[1] * window.innerHeight},
-            gaze: {x: avgX, y: avgY}
-          });
-          
-          // Registrar punto en WebGazer
-          webgazer.recordScreenPosition(p[0] * window.innerWidth, p[1] * window.innerHeight, 'click');
-        }
-        
-        el.remove();
-        currentPoint++;
-        setTimeout(showNextPoint, 500);
-      }, 1000);
-    }
-    
-    showNextPoint();
+        // alimentar calibración de webgazer (si API disponible)
+        // webgazer.recordScreenPosition? (dependiendo de la versión) -> aquí hacemos add of samples to storage for manual mapping
+        el.style.background = '#0af';
+      };
+      grid.appendChild(el);
+    });
 
-    function finishCalibration() {
-      grid.style.display = 'none';
-      document.getElementById('statusText').innerText = `calibración completada con ${calibrationPoints.length} puntos`;
-      
-      // Validar calibración
-      if (calibrationPoints.length < 9) {
-        alert('Calibración incompleta. Se recomienda recalibrar.');
-      }
-    }
+    // agregar botón finalizar
+    const end = document.createElement('button');
+    end.innerText = 'Finalizar calibración';
+    end.style.position='absolute';
+    end.style.left='50%';
+    end.style.bottom='6%';
+    end.style.transform='translateX(-50%)';
+    end.onclick = function(){
+      grid.style.display='none';
+      document.getElementById('statusText').innerText = 'calibración finalizada (aprox)';
+    };
+    grid.appendChild(end);
   }
 
   // ---------------------------
@@ -780,6 +520,10 @@
   // - Mantener distancia y registrar la resolución / tamaño de pantalla para comparar sesiones.
   // - Los valores de umbral son heurísticos; ajustar en tests.
   // ---------------------------
+
+  </script>
+</body>
+</html>
 
   </script>
 </body>
