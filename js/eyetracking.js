@@ -77,6 +77,15 @@ class EyeTracker {
     if (!this.isInitialized || this.isRunning) return;
     
     this.isRunning = true;
+    
+    // Initialize gaze indicator
+    const indicator = document.getElementById('gazeIndicator');
+    if (indicator) {
+      indicator.style.display = 'block';
+      indicator.style.left = (window.innerWidth / 2) + 'px';
+      indicator.style.top = (window.innerHeight / 2) + 'px';
+    }
+    
     this.trackLoop();
   }
 
@@ -126,10 +135,10 @@ class EyeTracker {
         return this.applyCalibration(gazeVector);
       }
 
-      // Basic mapping to screen coordinates
+      // Enhanced mapping to screen coordinates with better sensitivity
       return {
-        x: window.innerWidth * (0.5 + gazeVector.x * 0.8),
-        y: window.innerHeight * (0.5 + gazeVector.y * 0.8)
+        x: Math.max(0, Math.min(window.innerWidth, window.innerWidth * (0.5 + gazeVector.x * 1.2))),
+        y: Math.max(0, Math.min(window.innerHeight, window.innerHeight * (0.5 + gazeVector.y * 1.2)))
       };
     } catch (error) {
       console.error('Gaze calculation error:', error);
@@ -158,37 +167,40 @@ class EyeTracker {
   }
 
   calculateGazeVector(leftEye, rightEye, keypoints) {
-    // Calculate eye center
+    // Calculate eye center with higher precision
     const eyeCenter = {
       x: (leftEye.x + rightEye.x) / 2,
       y: (leftEye.y + rightEye.y) / 2
     };
 
-    // Use nose tip and face center for reference
+    // Use multiple reference points for better accuracy
     const noseTip = keypoints[1];
-    const faceCenter = keypoints[9]; // Forehead center
+    const leftCheek = keypoints[234];
+    const rightCheek = keypoints[454];
+    const forehead = keypoints[9];
+    const chin = keypoints[175];
 
-    if (!noseTip || !faceCenter) {
+    if (!noseTip || !leftCheek || !rightCheek || !forehead || !chin) {
       return { x: 0, y: 0 };
     }
 
-    // Calculate face dimensions for normalization
-    const leftFace = keypoints[234];
-    const rightFace = keypoints[454];
-    const topFace = keypoints[10];
-    const bottomFace = keypoints[152];
+    // Calculate face center more accurately
+    const faceCenter = {
+      x: (leftCheek.x + rightCheek.x) / 2,
+      y: (forehead.y + chin.y) / 2
+    };
 
-    if (!leftFace || !rightFace || !topFace || !bottomFace) {
-      return { x: 0, y: 0 };
-    }
+    // Calculate face dimensions
+    const faceWidth = Math.abs(rightCheek.x - leftCheek.x);
+    const faceHeight = Math.abs(chin.y - forehead.y);
 
-    const faceWidth = Math.abs(rightFace.x - leftFace.x);
-    const faceHeight = Math.abs(bottomFace.y - topFace.y);
+    // Improved gaze calculation with multiple reference points
+    const gazeX = (eyeCenter.x - faceCenter.x) / (faceWidth / 3);
+    const gazeY = (eyeCenter.y - faceCenter.y) / (faceHeight / 3);
 
-    // Calculate relative gaze direction
     return {
-      x: (eyeCenter.x - noseTip.x) / (faceWidth / 4),
-      y: (eyeCenter.y - noseTip.y) / (faceHeight / 4)
+      x: gazeX,
+      y: gazeY
     };
   }
 
@@ -225,16 +237,24 @@ class EyeTracker {
   }
 
   processGazeData(gaze) {
-    // Smooth the gaze data
-    if (this.smoothedGaze.x === 0) {
+    // Improved smoothing with adaptive factor
+    if (this.smoothedGaze.x === 0 && this.smoothedGaze.y === 0) {
       this.smoothedGaze = { x: gaze.x, y: gaze.y };
     } else {
-      const factor = 0.3;
+      // Calculate movement speed for adaptive smoothing
+      const distance = Math.sqrt(
+        Math.pow(gaze.x - this.smoothedGaze.x, 2) + 
+        Math.pow(gaze.y - this.smoothedGaze.y, 2)
+      );
+      
+      // Use higher smoothing for small movements, less for large movements
+      const factor = distance > 50 ? 0.6 : 0.2;
+      
       this.smoothedGaze.x = factor * gaze.x + (1 - factor) * this.smoothedGaze.x;
       this.smoothedGaze.y = factor * gaze.y + (1 - factor) * this.smoothedGaze.y;
     }
 
-    // Update gaze indicator
+    // Always update gaze indicator
     this.updateGazeIndicator();
 
     // Notify exercise system
@@ -245,9 +265,11 @@ class EyeTracker {
 
   updateGazeIndicator() {
     const indicator = document.getElementById('gazeIndicator');
-    if (indicator) {
+    if (indicator && this.smoothedGaze.x > 0 && this.smoothedGaze.y > 0) {
       indicator.style.left = this.smoothedGaze.x + 'px';
       indicator.style.top = this.smoothedGaze.y + 'px';
+      indicator.style.display = 'block';
+      indicator.style.opacity = '1';
     }
   }
 
