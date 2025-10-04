@@ -112,13 +112,48 @@ class MetricsCalculator {
   }
 
   updateUI(headVel, eyeVel, vorGain, rmsVal) {
-    document.getElementById('headVel').innerText = headVel ? headVel.toFixed(1) : '-';
-    document.getElementById('eyeVel').innerText = eyeVel ? Math.round(eyeVel) : '-';
-    document.getElementById('vorGain').innerText = vorGain ? vorGain.toFixed(2) : '-';
+    const headVelEl = document.getElementById('headVel').parentElement;
+    const eyeVelEl = document.getElementById('eyeVel').parentElement;
+    const vorGainEl = document.getElementById('vorGain').parentElement;
+    const latencyEl = document.getElementById('latency').parentElement;
+    const fixRMSEl = document.getElementById('fixRMS').parentElement;
+    
+    // Show/hide based on data availability
+    if (headVel && Math.abs(headVel) > 0.1) {
+      document.getElementById('headVel').innerText = headVel.toFixed(1);
+      headVelEl.style.display = 'block';
+    } else {
+      headVelEl.style.display = 'none';
+    }
+    
+    if (eyeVel && eyeVel > 1) {
+      document.getElementById('eyeVel').innerText = Math.round(eyeVel);
+      eyeVelEl.style.display = 'block';
+    } else {
+      eyeVelEl.style.display = 'none';
+    }
+    
+    if (vorGain && vorGain > 0) {
+      document.getElementById('vorGain').innerText = vorGain.toFixed(2);
+      vorGainEl.style.display = 'block';
+    } else {
+      vorGainEl.style.display = 'none';
+    }
     
     const latSamples = STATE.latencyEstimates.filter(e => e.latencyMs).map(e => e.latencyMs);
-    document.getElementById('latency').innerText = latSamples.length ? Math.round(UTILS.mean(latSamples)) + ' ms' : '-';
-    document.getElementById('fixRMS').innerText = rmsVal ? Math.round(rmsVal) + ' px' : '-';
+    if (latSamples.length > 0) {
+      document.getElementById('latency').innerText = Math.round(UTILS.mean(latSamples)) + ' ms';
+      latencyEl.style.display = 'block';
+    } else {
+      latencyEl.style.display = 'none';
+    }
+    
+    if (rmsVal && rmsVal > 1) {
+      document.getElementById('fixRMS').innerText = Math.round(rmsVal) + ' px';
+      fixRMSEl.style.display = 'block';
+    } else {
+      fixRMSEl.style.display = 'none';
+    }
   }
 
   recordData(t, gaze, headAngle, headVel, eyeVel, vorGain) {
