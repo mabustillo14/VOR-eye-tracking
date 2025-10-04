@@ -42,17 +42,23 @@ class EyeTracker {
         .setTracker('TFFacemesh') // TensorFlow face mesh tracker
         .begin();
 
-      // Configure for improved accuracy
+      // Configure for improved accuracy based on WebGazer best practices
       webgazerInstance
         .showVideoPreview(true)
-        .showPredictionPoints(false)
+        .showPredictionPoints(true) // Show prediction points for debugging
         .showFaceOverlay(true) // Enable face mesh overlay
         .showFaceFeedbackBox(true) // Show face feedback
-        .applyKalmanFilter(true) // Smooth predictions
-        .params.imgWidth = 320;
+        .applyKalmanFilter(true); // Smooth predictions
       
+      // Optimal parameters for accuracy
+      webgazerInstance.params.imgWidth = 320;
       webgazerInstance.params.imgHeight = 240;
-      webgazerInstance.params.faceFeedbackBoxRatio = 0.66; // Optimal face size
+      webgazerInstance.params.faceFeedbackBoxRatio = 0.66;
+      
+      // Additional accuracy improvements
+      webgazerInstance.params.moveTickSize = 50;
+      webgazerInstance.params.videoViewerWidth = 240;
+      webgazerInstance.params.videoViewerHeight = 180;
       
       // Setup collision system without particles
       this.setupCollisionSystem();
@@ -112,7 +118,7 @@ class EyeTracker {
       .attr('x', data.x - 3)
       .attr('y', data.y - 3);
 
-    // Get face mesh positions for eye lines with improved positioning
+    // Get face mesh positions for eye lines with corrected alignment
     try {
       const fmPositions = await webgazer.getTracker().getPositions();
       if (fmPositions) {
@@ -125,23 +131,24 @@ class EyeTracker {
           const rightEye = fmPositions[374];
 
           if (leftEye && rightEye) {
-            // Calculate eye positions relative to screen coordinates
-            const leftX = videoRect.right - (leftEye[0] * whr[0]);
+            // Calculate eye positions relative to screen coordinates with corrected alignment
+            const leftX = videoRect.left + (leftEye[0] * whr[0]);
             const leftY = videoRect.top + (leftEye[1] * whr[1]);
-            const rightX = videoRect.right - (rightEye[0] * whr[0]);
+            const rightX = videoRect.left + (rightEye[0] * whr[0]);
             const rightY = videoRect.top + (rightEye[1] * whr[1]);
 
+            // Draw lines from eyes to gaze point (corrected direction)
             d3.select('#eyeline1')
-              .attr('x1', data.x)
-              .attr('y1', data.y)
-              .attr('x2', leftX)
-              .attr('y2', leftY);
+              .attr('x1', leftX)
+              .attr('y1', leftY)
+              .attr('x2', data.x)
+              .attr('y2', data.y);
 
             d3.select('#eyeline2')
-              .attr('x1', data.x)
-              .attr('y1', data.y)
-              .attr('x2', rightX)
-              .attr('y2', rightY);
+              .attr('x1', rightX)
+              .attr('y1', rightY)
+              .attr('x2', data.x)
+              .attr('y2', data.y);
           }
         }
       }
@@ -304,28 +311,34 @@ class EyeTracker {
       const overlay = document.getElementById('calibrationOverlay');
       const grid = document.getElementById('calibrationGrid');
       const status = document.getElementById('calibrationStatus');
+      const precisionResults = document.getElementById('precisionResults');
       
       overlay.style.display = 'block';
       grid.innerHTML = '';
+      precisionResults.style.display = 'none';
       
-      // Improved calibration points for better accuracy
+      // WebGazer calibration.html style points for optimal accuracy
       const points = [
-        [0.1, 0.1], [0.5, 0.1], [0.9, 0.1],
-        [0.1, 0.5], [0.5, 0.5], [0.9, 0.5],
-        [0.1, 0.9], [0.5, 0.9], [0.9, 0.9]
+        [10, 10], [10, 50], [10, 90],
+        [20, 10], [20, 50], [20, 90],
+        [30, 10], [30, 50], [30, 90],
+        [40, 10], [40, 50], [40, 90],
+        [50, 10], [50, 50], [50, 90],
+        [60, 10], [60, 50], [60, 90],
+        [70, 10], [70, 50], [70, 90],
+        [80, 10], [80, 50], [80, 90],
+        [90, 10], [90, 50], [90, 90]
       ];
       
       let currentPoint = 0;
+      let calibrationData = [];
       status.textContent = `Calibración: punto ${currentPoint + 1} de ${points.length}`;
 
       const showNextPoint = () => {
         if (currentPoint >= points.length) {
-          // Validate calibration accuracy
-          this.validateCalibration().then((precision) => {
-            overlay.style.display = 'none';
-            STATE.isCalibrated = true;
-            this.currentPrecision = precision;
-            resolve(true);
+          // Run precision test like WebGazer calibration.html
+          this.runPrecisionTest(calibrationData).then((results) => {
+            this.showPrecisionResults(results, resolve);
           });
           return;
         }
@@ -333,32 +346,35 @@ class EyeTracker {
         const point = points[currentPoint];
         const element = document.createElement('div');
         element.className = 'cal-point';
-        element.style.left = (point[0] * 100) + '%';
-        element.style.top = (point[1] * 100) + '%';
+        element.style.left = point[0] + '%';
+        element.style.top = point[1] + '%';
         element.textContent = currentPoint + 1;
         
         grid.appendChild(element);
 
-        element.onclick = async () => {
+        // Auto-advance after 2 seconds or click
+        let clicked = false;
+        const calibratePoint = async () => {
+          if (clicked) return;
+          clicked = true;
+          
           element.classList.add('active');
           status.textContent = `Calibrando punto ${currentPoint + 1}... mantén la mirada fija`;
           
-          // Improved calibration with more samples
-          const screenX = point[0] * window.innerWidth;
-          const screenY = point[1] * window.innerHeight;
+          const screenX = (point[0] / 100) * window.innerWidth;
+          const screenY = (point[1] / 100) * window.innerHeight;
           
-          const t0 = performance.now();
+          // Collect samples for 1 second
           const samples = [];
-          while (performance.now() - t0 < 1500) { // Longer sampling time
+          const startTime = performance.now();
+          while (performance.now() - startTime < 1000) {
+            webgazer.recordScreenPosition(screenX, screenY, 'click');
             const pred = await webgazer.getCurrentPrediction();
-            if (pred) {
-              samples.push(pred);
-              // Add calibration data point
-              webgazer.recordScreenPosition(screenX, screenY, 'click');
-            }
-            await new Promise(r => setTimeout(r, 50)); // Higher frequency
+            if (pred) samples.push(pred);
+            await new Promise(r => setTimeout(r, 50));
           }
-
+          
+          calibrationData.push({ point: [screenX, screenY], samples });
           element.remove();
           currentPoint++;
           
@@ -366,32 +382,96 @@ class EyeTracker {
             status.textContent = `Calibración: punto ${currentPoint + 1} de ${points.length}`;
           }
           
-          setTimeout(showNextPoint, 300);
+          setTimeout(showNextPoint, 200);
         };
+
+        element.onclick = calibratePoint;
+        setTimeout(calibratePoint, 2000); // Auto-advance
       };
 
       showNextPoint();
     });
   }
 
-  async validateCalibration() {
-    // Simple validation - in real implementation, test prediction accuracy
-    const testPoints = [[0.25, 0.25], [0.75, 0.75]];
-    let totalError = 0;
+  async runPrecisionTest(calibrationData) {
+    const status = document.getElementById('calibrationStatus');
+    status.textContent = 'Ejecutando prueba de precisión...';
     
-    for (const point of testPoints) {
-      const pred = await webgazer.getCurrentPrediction();
-      if (pred) {
-        const expectedX = point[0] * window.innerWidth;
-        const expectedY = point[1] * window.innerHeight;
-        const error = Math.sqrt(Math.pow(pred.x - expectedX, 2) + Math.pow(pred.y - expectedY, 2));
-        totalError += error;
+    // Test points similar to WebGazer calibration.html
+    const testPoints = [
+      [25, 25], [75, 25], [25, 75], [75, 75], [50, 50]
+    ];
+    
+    const results = [];
+    
+    for (let i = 0; i < testPoints.length; i++) {
+      const point = testPoints[i];
+      const screenX = (point[0] / 100) * window.innerWidth;
+      const screenY = (point[1] / 100) * window.innerHeight;
+      
+      // Show test point
+      const testElement = document.createElement('div');
+      testElement.className = 'precision-test-point';
+      testElement.style.left = point[0] + '%';
+      testElement.style.top = point[1] + '%';
+      testElement.textContent = i + 1;
+      document.getElementById('calibrationGrid').appendChild(testElement);
+      
+      status.textContent = `Prueba de precisión: punto ${i + 1} de ${testPoints.length}`;
+      
+      // Collect predictions for 1 second
+      const predictions = [];
+      const startTime = performance.now();
+      while (performance.now() - startTime < 1000) {
+        const pred = await webgazer.getCurrentPrediction();
+        if (pred) predictions.push(pred);
+        await new Promise(r => setTimeout(r, 50));
       }
+      
+      // Calculate accuracy for this point
+      if (predictions.length > 0) {
+        const errors = predictions.map(pred => 
+          Math.sqrt(Math.pow(pred.x - screenX, 2) + Math.pow(pred.y - screenY, 2))
+        );
+        const avgError = errors.reduce((a, b) => a + b, 0) / errors.length;
+        results.push({ point: [screenX, screenY], error: avgError, predictions });
+      }
+      
+      testElement.remove();
     }
     
-    const avgError = totalError / testPoints.length;
-    const precision = Math.max(0, 100 - (avgError / 100) * 100);
-    return Math.round(precision);
+    return results;
+  }
+  
+  showPrecisionResults(results, resolve) {
+    const status = document.getElementById('calibrationStatus');
+    const precisionResults = document.getElementById('precisionResults');
+    const avgPrecision = document.getElementById('avgPrecision');
+    
+    if (results.length === 0) {
+      status.textContent = 'Error en la prueba de precisión';
+      resolve(false);
+      return;
+    }
+    
+    const totalError = results.reduce((sum, r) => sum + r.error, 0) / results.length;
+    const precisionPx = Math.round(totalError);
+    
+    status.textContent = 'Calibración completada';
+    avgPrecision.textContent = `${precisionPx} px`;
+    precisionResults.style.display = 'block';
+    
+    // Setup result buttons
+    document.getElementById('btnAcceptCalibration').onclick = () => {
+      document.getElementById('calibrationOverlay').style.display = 'none';
+      STATE.isCalibrated = true;
+      this.currentPrecision = precisionPx;
+      resolve(true);
+    };
+    
+    document.getElementById('btnRecalibrate').onclick = () => {
+      this.calibrate().then(resolve);
+    };
   }
 
   startSession() {
@@ -438,14 +518,14 @@ class EyeTracker {
   }
 
   positionFaceOverlay() {
-    // Ensure face overlay is positioned correctly with camera
+    // Ensure face overlay is positioned correctly with camera (moved to top-left)
     const faceOverlay = document.getElementById('webgazerFaceOverlay');
     const faceFeedback = document.getElementById('webgazerFaceFeedbackBox');
     
     if (faceOverlay) {
       faceOverlay.style.position = 'fixed';
       faceOverlay.style.top = '80px';
-      faceOverlay.style.right = '20px';
+      faceOverlay.style.left = '20px';
       faceOverlay.style.width = '240px';
       faceOverlay.style.height = '180px';
       faceOverlay.style.zIndex = '150002';
@@ -454,7 +534,7 @@ class EyeTracker {
     if (faceFeedback) {
       faceFeedback.style.position = 'fixed';
       faceFeedback.style.top = '80px';
-      faceFeedback.style.right = '20px';
+      faceFeedback.style.left = '20px';
       faceFeedback.style.width = '240px';
       faceFeedback.style.height = '180px';
       faceFeedback.style.zIndex = '150002';

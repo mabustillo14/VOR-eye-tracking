@@ -59,7 +59,10 @@ body {
   padding: 20px;
   backdrop-filter: blur(10px);
   overflow-y: auto;
-  position: relative;
+  position: absolute;
+  right: 0;
+  top: 70px;
+  height: calc(100vh - 70px);
   z-index: 100;
 }
 
@@ -169,6 +172,7 @@ button:disabled {
   position: relative;
   display: flex;
   flex-direction: column;
+  margin-right: 350px;
 }
 
 .instructions {
@@ -248,8 +252,9 @@ button:disabled {
   left: 50%;
   transform: translate(-50%, -50%);
   text-align: center;
-  max-width: 600px;
+  max-width: 700px;
   width: 90%;
+  z-index: 1001;
 }
 
 .calibration-grid {
@@ -262,10 +267,10 @@ button:disabled {
 
 .cal-point {
   position: absolute;
-  width: 30px;
-  height: 30px;
-  background: #00BFFF;
-  border: 3px solid #ffffff;
+  width: 25px;
+  height: 25px;
+  background: #FF4444;
+  border: 2px solid #ffffff;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   cursor: pointer;
@@ -273,8 +278,10 @@ button:disabled {
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  color: #000;
+  color: #fff;
+  font-size: 12px;
   transition: all 0.3s ease;
+  box-shadow: 0 0 10px rgba(255, 68, 68, 0.6);
 }
 
 .cal-point:hover {
@@ -283,6 +290,7 @@ button:disabled {
 
 .cal-point.active {
   background: #00FF00;
+  box-shadow: 0 0 15px rgba(0, 255, 0, 0.8);
   animation: pulse 0.5s infinite;
 }
 
@@ -305,15 +313,35 @@ button:disabled {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 10px 0;
-  padding: 8px 12px;
+  margin: 15px 0;
+  padding: 12px 16px;
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  border-radius: 8px;
+  font-size: 16px;
 }
 
 .precision-value {
   font-weight: bold;
   color: #4CAF50;
+  font-size: 18px;
+}
+
+.precision-info {
+  margin: 20px 0;
+  padding: 15px;
+  background: rgba(100, 181, 246, 0.1);
+  border-radius: 8px;
+  text-align: left;
+}
+
+.precision-info ul {
+  margin: 10px 0;
+  padding-left: 20px;
+}
+
+.precision-info li {
+  margin: 5px 0;
+  color: #B0BEC5;
 }
 
 .precision-actions {
@@ -386,7 +414,8 @@ button:disabled {
   justify-content: center;
   font-size: 10px;
   font-weight: bold;
-  color: #000;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(255, 152, 0, 0.6);
   animation: testPulse 1s infinite;
 }
 
@@ -433,13 +462,13 @@ button:disabled {
   margin-top: 20px;
 }
 
-/* WebGazer Camera Positioning - Moved to top-right to avoid menu overlap */
+/* WebGazer Camera Positioning - Moved to top-left for better accuracy */
 #webgazerVideoFeed {
   position: fixed !important;
   top: 80px !important;
-  right: 20px !important;
+  left: 20px !important;
   bottom: auto !important;
-  left: auto !important;
+  right: auto !important;
   width: 240px !important;
   height: 180px !important;
   z-index: 150000 !important;
@@ -451,9 +480,9 @@ button:disabled {
 #webgazerVideoCanvas {
   position: fixed !important;
   top: 80px !important;
-  right: 20px !important;
+  left: 20px !important;
   bottom: auto !important;
-  left: auto !important;
+  right: auto !important;
   width: 240px !important;
   height: 180px !important;
   z-index: 150001 !important;
@@ -465,7 +494,7 @@ button:disabled {
 #webgazerFaceFeedbackBox {
   position: fixed !important;
   top: 80px !important;
-  right: 20px !important;
+  left: 20px !important;
   width: 240px !important;
   height: 180px !important;
   z-index: 150002 !important;
@@ -475,7 +504,7 @@ button:disabled {
 #webgazerFaceOverlay {
   position: fixed !important;
   top: 80px !important;
-  right: 20px !important;
+  left: 20px !important;
   width: 240px !important;
   height: 180px !important;
   z-index: 150002 !important;

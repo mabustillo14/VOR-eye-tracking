@@ -52,9 +52,7 @@
               <span id="currentPrecision" class="status-value">-</span>
             </div>
           </div>
-          <div class="camera-note">
-            <small>📍 Cámara reubicada arriba-derecha</small>
-          </div>
+
         </div>
 
         <div class="metrics-panel">
@@ -96,15 +94,32 @@
     <div id="calibrationOverlay" class="calibration-overlay">
       <div class="calibration-content">
         <h2 id="calibrationTitle">Calibración del Sistema</h2>
-        <p id="calibrationInstructions">Mira fijamente cada punto que aparezca y mantén la mirada durante 2 segundos.</p>
+        <p id="calibrationInstructions">Mira fijamente cada punto que aparezca. Los puntos avanzarán automáticamente después de 2 segundos o puedes hacer clic para avanzar manualmente.</p>
+        <p><strong>Instrucciones importantes:</strong></p>
+        <ul style="text-align: left; max-width: 500px; margin: 0 auto;">
+          <li>Mantén la cabeza quieta durante la calibración</li>
+          <li>Mira directamente al centro de cada punto</li>
+          <li>Asegúrate de que tu rostro esté bien iluminado</li>
+          <li>Evita movimientos bruscos</li>
+        </ul>
         <div id="calibrationGrid" class="calibration-grid"></div>
         <div class="calibration-progress">
           <span id="calibrationStatus">Preparando calibración...</span>
           <div id="precisionResults" class="precision-results" style="display:none;">
             <h3>Resultados de Precisión</h3>
+            <p>La calibración ha sido completada. Revise los resultados de precisión:</p>
             <div class="precision-metric">
               <label>Precisión Promedio:</label>
               <span id="avgPrecision" class="precision-value">-</span>
+            </div>
+            <div class="precision-info">
+              <p><strong>Interpretación:</strong></p>
+              <ul>
+                <li>&lt; 50px: Excelente precisión</li>
+                <li>50-100px: Buena precisión</li>
+                <li>100-200px: Precisión aceptable</li>
+                <li>&gt; 200px: Recalibrar recomendado</li>
+              </ul>
             </div>
             <div class="precision-actions">
               <button id="btnAcceptCalibration" class="btn-success">Aceptar Calibración</button>
