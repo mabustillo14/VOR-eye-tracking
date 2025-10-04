@@ -1,6 +1,8 @@
 # Sistema de Entrenamiento VOR con Eye Tracking
 
-Sistema web para entrenamiento y análisis del Reflejo Vestíbulo-Ocular (VOR) utilizando tecnología de seguimiento ocular basada en WebGazer.js.
+Sistema web para entrenamiento y análisis del Reflejo Vestíbulo-Ocular (VOR) utilizando tecnología de seguimiento ocular.
+
+Desarrollado por [**Mario Bustillo**](https://www.linkedin.com/in/mario-bustillo/)
 
 ## Descripción
 
@@ -187,20 +189,7 @@ velocidadOjo,gananciaVOR,latenciaPromedio,estabilidadRMS,conteoSacadas
 
 ## Instalación y Uso
 
-### 1. Configuración
-```bash
-# Clonar repositorio
-git clone [repository-url]
-cd VOR-eye-tracking
-
-# Servir archivos (requerido por WebGazer)
-python -m http.server 8000
-# o
-npx serve .
-```
-
-
-### . Flujo de Uso
+### Flujo de Uso
 1. **Verificación**: Sistema comprueba compatibilidad
 2. **Introducción**: Explicación del proyecto
 3. **Calibración**: 9 puntos + cálculo de precisión
