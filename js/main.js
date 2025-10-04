@@ -62,7 +62,7 @@ class VORApp {
     const whr = webgazer.getVideoPreviewToCameraResolutionRatio();
     
     // Update visualization
-    visualizationManager.updateGazeVisualization(data);
+    visualizationManager.updateGazeVisualization(data, fmPositions, whr);
 
     // Calculate metrics
     const gaze = { x: data.x, y: data.y, t: t };
