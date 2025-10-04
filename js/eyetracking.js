@@ -53,9 +53,13 @@ class EyeTracker {
 
       // Load MediaPipe FaceMesh model
       await tf.ready();
-      this.model = await faceLandmarksDetection.load(
-        faceLandmarksDetection.SupportedPackages.mediapipeFacemesh,
-        { maxFaces: 1 }
+      this.model = await faceLandmarksDetection.createDetector(
+        faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh,
+        {
+          runtime: 'tfjs',
+          maxFaces: 1,
+          refineLandmarks: true
+        }
       );
 
       console.log('AI model loaded successfully');
@@ -81,11 +85,8 @@ class EyeTracker {
 
     try {
       // Get predictions from the model
-      const predictions = await this.model.estimateFaces({
-        input: this.video,
-        returnTensors: false,
-        flipHorizontal: false,
-        predictIrises: true
+      const predictions = await this.model.estimateFaces(this.video, {
+        flipHorizontal: false
       });
 
       if (predictions.length > 0) {
@@ -105,7 +106,7 @@ class EyeTracker {
 
   calculateGazeFromLandmarks(face) {
     try {
-      const keypoints = face.scaledMesh;
+      const keypoints = face.keypoints;
       
       // Eye landmarks (MediaPipe indices)
       const leftEyeIndices = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
@@ -115,18 +116,9 @@ class EyeTracker {
       const leftEyeCenter = this.getEyeCenter(keypoints, leftEyeIndices);
       const rightEyeCenter = this.getEyeCenter(keypoints, rightEyeIndices);
       
-      // Get iris positions if available
-      let leftIris = null, rightIris = null;
-      if (face.annotations && face.annotations.leftEyeIris && face.annotations.rightEyeIris) {
-        leftIris = this.getCenter(face.annotations.leftEyeIris);
-        rightIris = this.getCenter(face.annotations.rightEyeIris);
-      }
-
-      // Calculate gaze direction
+      // Calculate gaze direction using eye centers and face geometry
       const gazeVector = this.calculateGazeVector(
-        leftEyeCenter, rightEyeCenter, 
-        leftIris, rightIris,
-        keypoints
+        leftEyeCenter, rightEyeCenter, keypoints
       );
 
       // Apply calibration if available
@@ -148,8 +140,10 @@ class EyeTracker {
   getEyeCenter(keypoints, indices) {
     let x = 0, y = 0;
     for (const idx of indices) {
-      x += keypoints[idx][0];
-      y += keypoints[idx][1];
+      if (keypoints[idx]) {
+        x += keypoints[idx].x;
+        y += keypoints[idx].y;
+      }
     }
     return { x: x / indices.length, y: y / indices.length };
   }
@@ -163,37 +157,38 @@ class EyeTracker {
     return { x: x / points.length, y: y / points.length };
   }
 
-  calculateGazeVector(leftEye, rightEye, leftIris, rightIris, keypoints) {
-    // Use iris positions if available for higher accuracy
-    if (leftIris && rightIris) {
-      const leftGazeX = (leftIris.x - leftEye.x) / 20; // Normalize
-      const leftGazeY = (leftIris.y - leftEye.y) / 20;
-      const rightGazeX = (rightIris.x - rightEye.x) / 20;
-      const rightGazeY = (rightIris.y - rightEye.y) / 20;
-      
-      return {
-        x: (leftGazeX + rightGazeX) / 2,
-        y: (leftGazeY + rightGazeY) / 2
-      };
-    }
-
-    // Fallback to basic eye center calculation
+  calculateGazeVector(leftEye, rightEye, keypoints) {
+    // Calculate eye center
     const eyeCenter = {
       x: (leftEye.x + rightEye.x) / 2,
       y: (leftEye.y + rightEye.y) / 2
     };
 
-    // Use nose tip for reference
+    // Use nose tip and face center for reference
     const noseTip = keypoints[1];
     const faceCenter = keypoints[9]; // Forehead center
 
-    // Calculate relative gaze direction
-    const faceWidth = Math.abs(keypoints[234][0] - keypoints[454][0]); // Face width
-    const faceHeight = Math.abs(keypoints[10][1] - keypoints[152][1]); // Face height
+    if (!noseTip || !faceCenter) {
+      return { x: 0, y: 0 };
+    }
 
+    // Calculate face dimensions for normalization
+    const leftFace = keypoints[234];
+    const rightFace = keypoints[454];
+    const topFace = keypoints[10];
+    const bottomFace = keypoints[152];
+
+    if (!leftFace || !rightFace || !topFace || !bottomFace) {
+      return { x: 0, y: 0 };
+    }
+
+    const faceWidth = Math.abs(rightFace.x - leftFace.x);
+    const faceHeight = Math.abs(bottomFace.y - topFace.y);
+
+    // Calculate relative gaze direction
     return {
-      x: (eyeCenter.x - noseTip[0]) / (faceWidth / 4),
-      y: (eyeCenter.y - noseTip[1]) / (faceHeight / 4)
+      x: (eyeCenter.x - noseTip.x) / (faceWidth / 4),
+      y: (eyeCenter.y - noseTip.y) / (faceHeight / 4)
     };
   }
 
