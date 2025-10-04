@@ -23,8 +23,8 @@ class EyeTracker {
 
       webgazerInstance
         .showVideoPreview(true)
-        .showPredictionPoints(true) // Show for debugging
-        .applyKalmanFilter(false); // Disable for more responsive tracking
+        .showPredictionPoints(false) // Hide prediction points
+        .applyKalmanFilter(false);
 
       // Optimal parameters for accuracy
       webgazer.params.videoViewerWidth = 240;
@@ -34,7 +34,7 @@ class EyeTracker {
       webgazer.params.showFaceFeedbackBox = false;
 
       // Position camera in bottom right
-      setTimeout(() => this.positionCamera(), 500);
+      setTimeout(() => this.positionCamera(), 1000);
 
       webgazer.setGazeListener(this.onGazeData.bind(this));
       
@@ -47,6 +47,22 @@ class EyeTracker {
   }
 
   positionCamera() {
+    // Remove any duplicate video elements
+    const existingVideos = document.querySelectorAll('video');
+    if (existingVideos.length > 1) {
+      for (let i = 1; i < existingVideos.length; i++) {
+        existingVideos[i].remove();
+      }
+    }
+    
+    // Remove any duplicate canvas elements
+    const existingCanvas = document.querySelectorAll('canvas');
+    if (existingCanvas.length > 1) {
+      for (let i = 1; i < existingCanvas.length; i++) {
+        existingCanvas[i].remove();
+      }
+    }
+    
     const video = document.getElementById('webgazerVideoFeed');
     const canvas = document.getElementById('webgazerVideoCanvas');
     
@@ -59,6 +75,8 @@ class EyeTracker {
       video.style.width = '240px';
       video.style.height = '180px';
       video.style.zIndex = '150000';
+      video.style.border = '2px solid #4CAF50';
+      video.style.borderRadius = '8px';
     }
     
     if (canvas) {
@@ -70,6 +88,8 @@ class EyeTracker {
       canvas.style.width = '240px';
       canvas.style.height = '180px';
       canvas.style.zIndex = '150001';
+      canvas.style.border = '2px solid #4CAF50';
+      canvas.style.borderRadius = '8px';
     }
   }
 
@@ -191,16 +211,7 @@ class EyeTracker {
   }
 
   togglePreview() {
-    const body = document.body;
-    if (body.classList.contains('camera-hidden')) {
-      body.classList.remove('camera-hidden');
-      webgazer.showVideoPreview(true);
-      return false; // Camera now visible
-    } else {
-      body.classList.add('camera-hidden');
-      webgazer.showVideoPreview(false);
-      return true; // Camera now hidden
-    }
+    // Not needed - camera stays in bottom right
   }
 
   destroy() {

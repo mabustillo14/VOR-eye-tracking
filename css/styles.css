@@ -326,7 +326,7 @@ button:disabled {
   margin-top: 20px;
 }
 
-/* Camera positioning */
+/* Camera positioning - single instance */
 #webgazerVideoFeed {
   position: fixed !important;
   bottom: 20px !important;
@@ -354,7 +354,7 @@ button:disabled {
   border-radius: 8px !important;
 }
 
-.camera-hidden #webgazerVideoFeed,
-.camera-hidden #webgazerVideoCanvas {
+/* Hide WebGazer prediction points */
+.webgazerGazeDot {
   display: none !important;
 }

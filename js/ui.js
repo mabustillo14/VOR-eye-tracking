@@ -23,7 +23,6 @@ class UIManager {
     // Modal buttons
     document.getElementById('btnExport')?.addEventListener('click', () => this.exportData());
     document.getElementById('btnNewSession')?.addEventListener('click', () => this.newSession());
-    document.getElementById('btnToggleVideo')?.addEventListener('click', () => this.toggleVideo());
 
     // Close modal when clicking outside
     document.getElementById('resultsModal')?.addEventListener('click', (e) => {
@@ -196,16 +195,6 @@ class UIManager {
 
   resetProgress() {
     document.getElementById('progressFill').style.width = '0%';
-  }
-
-  toggleVideo() {
-    if (STATE.eyeTracker) {
-      const isHidden = STATE.eyeTracker.togglePreview();
-      const btn = document.getElementById('btnToggleVideo');
-      if (btn) {
-        btn.textContent = isHidden ? 'Mostrar Cámara' : 'Ocultar Cámara';
-      }
-    }
   }
 
   showMessage(message, type = 'info') {
