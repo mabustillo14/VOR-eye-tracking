@@ -243,7 +243,7 @@ button:disabled {
   height: 100%;
   background: rgba(0, 0, 0, 0.9);
   display: none;
-  z-index: 1000;
+  z-index: 200000;
 }
 
 .calibration-content {
@@ -254,7 +254,8 @@ button:disabled {
   text-align: center;
   max-width: 700px;
   width: 90%;
-  z-index: 1001;
+  z-index: 200001;
+  pointer-events: auto;
 }
 
 .calibration-grid {
@@ -462,15 +463,15 @@ button:disabled {
   margin-top: 20px;
 }
 
-/* WebGazer Camera Positioning - Moved to top-left for better accuracy */
+/* WebGazer Camera Positioning - Top-left but below header */
 #webgazerVideoFeed {
   position: fixed !important;
-  top: 80px !important;
+  top: 120px !important;
   left: 20px !important;
   bottom: auto !important;
   right: auto !important;
-  width: 240px !important;
-  height: 180px !important;
+  width: 200px !important;
+  height: 150px !important;
   z-index: 150000 !important;
   border: 2px solid #4CAF50 !important;
   border-radius: 8px !important;
@@ -479,12 +480,12 @@ button:disabled {
 
 #webgazerVideoCanvas {
   position: fixed !important;
-  top: 80px !important;
+  top: 120px !important;
   left: 20px !important;
   bottom: auto !important;
   right: auto !important;
-  width: 240px !important;
-  height: 180px !important;
+  width: 200px !important;
+  height: 150px !important;
   z-index: 150001 !important;
   border: 2px solid #4CAF50 !important;
   border-radius: 8px !important;
@@ -493,20 +494,20 @@ button:disabled {
 /* Face mesh overlay positioning to match camera */
 #webgazerFaceFeedbackBox {
   position: fixed !important;
-  top: 80px !important;
+  top: 120px !important;
   left: 20px !important;
-  width: 240px !important;
-  height: 180px !important;
+  width: 200px !important;
+  height: 150px !important;
   z-index: 150002 !important;
   pointer-events: none !important;
 }
 
 #webgazerFaceOverlay {
   position: fixed !important;
-  top: 80px !important;
+  top: 120px !important;
   left: 20px !important;
-  width: 240px !important;
-  height: 180px !important;
+  width: 200px !important;
+  height: 150px !important;
   z-index: 150002 !important;
   pointer-events: none !important;
 }

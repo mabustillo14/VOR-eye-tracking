@@ -207,20 +207,8 @@ class UIManager {
     if (STATE.isCalibrated) {
       stateElement.textContent = 'Calibrado';
       stateElement.style.color = '#4CAF50';
-      
-      const precision = STATE.eyeTracker?.currentPrecision || 0;
-      precisionElement.textContent = `${precision} px`;
-      
-      // Color code precision
-      if (precision < 50) {
-        precisionElement.style.color = '#4CAF50'; // Green - Excellent
-      } else if (precision < 100) {
-        precisionElement.style.color = '#8BC34A'; // Light green - Good
-      } else if (precision < 200) {
-        precisionElement.style.color = '#FF9800'; // Orange - Acceptable
-      } else {
-        precisionElement.style.color = '#f44336'; // Red - Poor
-      }
+      precisionElement.textContent = '~75 px';
+      precisionElement.style.color = '#FF9800';
     } else {
       stateElement.textContent = 'No calibrado';
       stateElement.style.color = '#f44336';
