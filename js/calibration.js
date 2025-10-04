@@ -22,7 +22,7 @@ class CalibrationManager {
           <h3>Preparación:</h3>
           <ul>
             <li>Siéntese cómodamente frente a la pantalla</li>
-            <li>Mantenga una distancia de 60-80cm</li>
+            <li>Mantenga una distancia de 60 - 80 cm</li>
             <li>Asegúrese de que su rostro esté bien iluminado</li>
             <li>Evite movimientos bruscos durante la calibración</li>
           </ul>
