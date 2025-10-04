@@ -2,141 +2,515 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>VOR Rehabilitación - Sistema de Entrenamiento</title>
+  <title>Experiencia AR / Rehabilitación VOR — WebGazer + D3</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    html,body { height:100%; margin:0; font-family: Arial, Helvetica, sans-serif; background:#111; color:#eee; }
+    #ui { position: fixed; right: 12px; top: 12px; width:340px; background: rgba(0,0,0,0.6); padding:12px; border-radius:8px; z-index:200000; }
+    #ui h2 { margin:6px 0 8px 0; font-size:16px; }
+    #controls button { margin:6px 6px 6px 0; padding:8px 10px; }
+    #status { font-size:12px; margin-top:6px; color:#ddd; }
+    #metrics { margin-top:8px; font-size:13px; max-height:240px; overflow:auto; }
+    svg { background: transparent; }
+    #calibrationGrid { position: fixed; left:0; top:0; width:100%; height:100%; z-index:300000; display:none; }
+    .calPoint { width:28px; height:28px; border-radius:50%; background:#0af; position:absolute; transform:translate(-50%,-50%); display:flex; align-items:center; justify-content:center; color:#000; font-weight:bold; cursor:pointer; }
+    #instructions { font-size:13px; margin-top:8px; color:#ccc; }
+    #downloadLink { display:inline-block; margin-top:8px; }
+    .small { font-size:12px; color:#bbb; }
+  </style>
 </head>
 <body>
-  <div id="app">
-    <!-- Header -->
-    <header class="header">
-      <h1>VOR Rehabilitación</h1>
-      <div class="level-indicator">
-        <span>Nivel: <span id="currentLevel">1</span></span>
-        <div class="progress-bar">
-          <div id="progressFill" class="progress-fill"></div>
-        </div>
-      </div>
-    </header>
+  <div id="ui" aria-live="polite">
+    <h2>VOR Rehab — Demo WebGazer</h2>
+    <div id="controls">
+      <button id="btnCalibrate">Calibración (9 puntos)</button>
+      <button id="btnStart">Iniciar sesión</button>
+      <button id="btnStop" disabled>Detener sesión</button>
+      <button id="btnExport" disabled>Exportar CSV</button>
+      <button id="btnShowPreview">Alternar video</button>
+    </div>
+    <div id="status">Estado: <span id="statusText">inicializando...</span></div>
 
-    <!-- Main Interface -->
-    <div id="mainInterface" class="main-interface">
-      <div class="control-panel">
-        <div class="exercise-selector">
-          <h3>🎯 Seleccionar Ejercicio</h3>
-          <div class="exercise-buttons">
-            <button id="btnLevel1" class="exercise-btn active">Nivel 1: Fijación Central</button>
-            <button id="btnLevel2" class="exercise-btn">Nivel 2: Movimiento Horizontal</button>
-            <button id="btnLevel3" class="exercise-btn">Nivel 3: Movimiento Vertical</button>
-            <button id="btnLevel4" class="exercise-btn">Nivel 4: Movimiento Diagonal</button>
-            <button id="btnLevel5" class="exercise-btn">Nivel 5: Seguimiento Complejo</button>
-          </div>
-        </div>
-
-        <div class="session-controls">
-          <button id="btnCalibrate" class="btn-primary">Calibrar Sistema</button>
-          <button id="btnStart" class="btn-success">Iniciar Ejercicio</button>
-          <button id="btnPause" class="btn-warning" disabled>Pausar</button>
-          <button id="btnStop" class="btn-danger" disabled>Detener</button>
-        </div>
-        
-        <div class="calibration-info">
-          <h4>📹 Estado de Calibración</h4>
-          <div class="calibration-status">
-            <div class="status-item">
-              <label>Estado:</label>
-              <span id="calibrationState" class="status-value">No calibrado</span>
-            </div>
-            <div class="status-item">
-              <label>Precisión:</label>
-              <span id="currentPrecision" class="status-value">-</span>
-            </div>
-          </div>
-          <div class="camera-note">
-            <small>📍 Cámara reubicada arriba-derecha</small>
-          </div>
-        </div>
-
-        <div class="metrics-panel">
-          <h4>📊 Métricas en Tiempo Real</h4>
-          <div class="metrics-grid">
-            <div class="metric">
-              <label>Estabilidad de Fijación:</label>
-              <span id="fixationStability" class="metric-value">-</span>
-            </div>
-            <div class="metric">
-              <label>Precisión VOR:</label>
-              <span id="vorAccuracy" class="metric-value">-</span>
-            </div>
-            <div class="metric">
-              <label>Tiempo en Objetivo:</label>
-              <span id="timeOnTarget" class="metric-value">-</span>
-            </div>
-            <div class="metric">
-              <label>Puntuación:</label>
-              <span id="currentScore" class="metric-value score">0</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="exercise-area">
-        <div id="exerciseInstructions" class="instructions">
-          <h3>Instrucciones</h3>
-          <p>Selecciona un nivel para comenzar el entrenamiento VOR.</p>
-        </div>
-        <div id="targetArea" class="target-area">
-          <div id="fixationTarget" class="fixation-target"></div>
-          <div id="gazeIndicator" class="gaze-indicator"></div>
-        </div>
-      </div>
+    <div id="instructions">
+      Protocolo sugerido (ejemplo): mira al centro, luego gira la cabeza rápidamente a la derecha/izquierda (aprox. 20°) manteniendo la mirada en el objetivo. Repetir 10 veces por dirección. El sistema calcula métricas aproximadas.
     </div>
 
-    <!-- Calibration Overlay -->
-    <div id="calibrationOverlay" class="calibration-overlay">
-      <div class="calibration-content">
-        <h2 id="calibrationTitle">Calibración del Sistema</h2>
-        <p id="calibrationInstructions">Mira fijamente cada punto que aparezca y mantén la mirada durante 2 segundos.</p>
-        <div id="calibrationGrid" class="calibration-grid"></div>
-        <div class="calibration-progress">
-          <span id="calibrationStatus">Preparando calibración...</span>
-          <div id="precisionResults" class="precision-results" style="display:none;">
-            <h3>Resultados de Precisión</h3>
-            <div class="precision-metric">
-              <label>Precisión Promedio:</label>
-              <span id="avgPrecision" class="precision-value">-</span>
-            </div>
-            <div class="precision-actions">
-              <button id="btnAcceptCalibration" class="btn-success">Aceptar Calibración</button>
-              <button id="btnRecalibrate" class="btn-warning">Recalibrar</button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div id="metrics">
+      <div><strong>Métricas en tiempo real</strong></div>
+      <div class="small">Head angular vel: <span id="headVel">-</span> °/s</div>
+      <div class="small">Eye (gaze) vel: <span id="eyeVel">-</span> px/s</div>
+      <div class="small">VOR gain (approx): <span id="vorGain">-</span></div>
+      <div class="small">Latency est.: <span id="latency">-</span> ms</div>
+      <div class="small">Fixation stability (RMS): <span id="fixRMS">-</span></div>
+      <div class="small">Sacadas contadas: <span id="saccCount">0</span></div>
+      <div class="small">Frames registrados: <span id="frames">0</span></div>
     </div>
-
-    <!-- Results Modal -->
-    <div id="resultsModal" class="modal">
-      <div class="modal-content">
-        <h2>Resultados del Ejercicio</h2>
-        <div id="resultsContent" class="results-content"></div>
-        <div class="modal-actions">
-          <button id="btnExport" class="btn-secondary">Exportar Datos</button>
-          <button id="btnNewSession" class="btn-primary">Nueva Sesión</button>
-        </div>
-      </div>
-    </div>
+    <a id="downloadLink" href="#" style="display:none">[descargar CSV]</a>
   </div>
 
-  <!-- Scripts -->
+  <!-- Calibration overlay -->
+  <div id="calibrationGrid"></div>
+
+  <!-- Scripts: d3, localforage, webgazer (local or CDN). Ajusta ruta de webgazer si la tienes local -->
   <script src="https://d3js.org/d3.v3.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.8.1/localforage.js"></script>
+  <!-- Asumes webgazer.js disponible en la misma carpeta; si usas CDN, sustituir la ruta -->
   <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
-  
-  <script src="js/config.js"></script>
-  <script src="js/eyetracking.js"></script>
-  <script src="js/exercises.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/app.js"></script>
+
+  <script>
+  // ---------------------------
+  // Config inicial
+  // ---------------------------
+  window.saveDataAcrossSessions = false;
+  const collisionSVG = "collisionSVG";
+  var force = [];
+  var nodes = [];
+
+  // Datos de registro
+  let sessionActive = false;
+  let recorded = [];
+  let frameCount = 0;
+  let saccCount = 0;
+
+  // Para cálculos temporales
+  let lastHeadAngle = null;
+  let lastGaze = null;
+  let lastTimestamp = null;
+  let latencyEstimates = [];
+  let fixPositions = [];
+
+  // Parámetros de detección de sacadas (umbral en px/s de gaze)
+  const SACCADE_VEL_THRESHOLD = 1500; // ajustable según resolución/cámara
+  const SAMPLE_WINDOW_MS = 100; // ventana para RMS de fijación
+
+  // Vectores para promedio
+  function mean(arr){ return arr.reduce((a,b)=>a+b,0)/Math.max(arr.length,1); }
+  function rms(arr){ return Math.sqrt(mean(arr.map(v=>v*v))); }
+
+  // ---------------------------
+  // Inicialización WebGazer
+  // ---------------------------
+  window.onload = async function() {
+    if (!window.saveDataAcrossSessions) {
+        var localstorageDataLabel = 'webgazerGlobalData';
+        localforage.setItem(localstorageDataLabel, null);
+        var localstorageSettingsLabel = 'webgazerGlobalSettings';
+        localforage.setItem(localstorageSettingsLabel, null);
+    }
+
+    // Inicializa webgazer
+    const webgazerInstance = await webgazer.setRegression('ridge')
+      .setTracker('TFFacemesh')
+      .begin();
+
+    webgazerInstance.showVideoPreview(true)
+      .showPredictionPoints(false)
+      .applyKalmanFilter(true);
+
+    // UI bindings
+    document.getElementById('statusText').innerText = 'listo para calibrar';
+    document.getElementById('btnCalibrate').onclick = startCalibration;
+    document.getElementById('btnStart').onclick = startSession;
+    document.getElementById('btnStop').onclick = stopSession;
+    document.getElementById('btnExport').onclick = exportCSV;
+    document.getElementById('btnShowPreview').onclick = togglePreview;
+
+    // prepara sistema de colisiones/visualización
+    setupCollisionSystem();
+    webgazer.setGazeListener(collisionEyeListener);
+  };
+
+  window.onbeforeunload = function() {
+    if (window.saveDataAcrossSessions) {
+        webgazer.end();
+    } else {
+        localforage.clear();
+    }
+  }
+
+  // ---------------------------
+  // Sistema visual (collision) basado en tu base
+  // ---------------------------
+  function setupCollisionSystem() {
+    var width = window.innerWidth;
+    var height = window.innerHeight;
+
+    var numberOfNodes = 200;
+
+    nodes = d3.range(numberOfNodes).map(function() { return {radius: Math.random() * 12 + 4}; } ),
+    nodes[0].radius = 0;
+    nodes[0].fixed = true;
+
+    force = d3.layout.force()
+      .gravity(0.05)
+      .charge(function(d, i) { return i ? 0 : -2000; })
+      .nodes(nodes)
+      .size([width, height])
+      .start();
+
+    var svg = d3.select("body").append("svg")
+      .attr("id", collisionSVG)
+      .attr("width", width)
+      .attr("height", height)
+      .style("top", "0px")
+      .style("left","0px")
+      .style("margin","0px")
+      .style("position","absolute")
+      .style("z-index", 100000);
+
+    var color = d3.scale.category10();
+    var colors = [];
+    for(var i=0; i<numberOfNodes-2; i++){
+      colors[i] = color(0);
+    }
+    colors.push("orange");
+
+    svg.selectAll("circle")
+      .data(nodes.slice(1))
+      .enter().append("circle")
+      .attr("r", function(d) { return d.radius; })
+      .style("fill", function(d, i) { return colors[i]; });
+
+    force.on("tick", function(e) {
+      var q = d3.geom.quadtree(nodes),
+      i = 0,
+      n = nodes.length;
+
+      while (++i < n) q.visit(collide(nodes[i]));
+
+      svg.selectAll("circle")
+      .attr("cx", function(d) { return d.x; })
+      .attr("cy", function(d) { return d.y; });
+    });
+
+    svg.append("line")
+      .attr("id", "eyeline1" )
+      .attr("stroke-width",2)
+      .attr("stroke","red");
+
+    svg.append("line")
+      .attr("id", "eyeline2" )
+      .attr("stroke-width",2)
+      .attr("stroke","red");
+
+    svg.append("rect")
+      .attr("id","predictionSquare")
+      .attr("width",6)
+      .attr("height",6)
+      .attr("fill","red");
+
+    svg.on("mousemove", function() {
+      var p1 = d3.mouse(this);
+      nodes[0].px = p1[0];
+      nodes[0].py = p1[1];
+      force.resume();
+    });
+
+    function collide(node) {
+      var r = node.radius + 16,
+      nx1 = node.x - r,
+      nx2 = node.x + r,
+      ny1 = node.y - r,
+      ny2 = node.y + r;
+      return function(quad, x1, y1, x2, y2) {
+        if (quad.point && (quad.point !== node)) {
+          var x = node.x - quad.point.x,
+          y = node.y - quad.point.y,
+          l = Math.sqrt(x * x + y * y),
+          r = node.radius + quad.point.radius;
+          if (l < r) {
+            l = (l - r) / l * .5;
+            node.x -= x *= l;
+            node.y -= y *= l;
+            quad.point.x += x;
+            quad.point.y += y;
+          }
+        }
+        return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
+      };
+    }
+  }
+
+  var webgazerCanvas = null;
+  var previewWidth = webgazer.params && webgazer.params.videoViewerWidth ? webgazer.params.videoViewerWidth : 320;
+
+  // ---------------------------
+  // Listener principal: recibe data de gaze y calcula métricas
+  // ---------------------------
+  var collisionEyeListener = async function(data, clock) {
+    // data: {x, y} (predicción de mirada en coordenadas de pantalla)
+    // clock: timestamp ms
+    if(!data) return;
+
+    // actualiza colisión
+    nodes[0].px = data.x;
+    nodes[0].py = data.y;
+    force.resume();
+
+    if (!webgazerCanvas) {
+      webgazerCanvas = webgazer.getVideoElementCanvas();
+    }
+
+    // obtiene posiciones facemesh
+    var fmPositions = await webgazer.getTracker().getPositions(); // array de landmarks
+    if (!fmPositions) return;
+
+    var whr = webgazer.getVideoPreviewToCameraResolutionRatio();
+
+    // calcula líneas visuales (ojo izquierdo/derecho)
+    try {
+      var leftEye = fmPositions[145];  // landmark ejemplo
+      var rightEye = fmPositions[374]; // landmark ejemplo
+      var nose = fmPositions[1] || fmPositions[4]; // aproximación
+
+      // Ajuste según ratio
+      var leftX = previewWidth - leftEye[0] * whr[0];
+      var leftY = leftEye[1] * whr[1];
+      var rightX = previewWidth - rightEye[0] * whr[0];
+      var rightY = rightEye[1] * whr[1];
+
+      d3.select('#eyeline1')
+        .attr("x1",data.x)
+        .attr("y1",data.y)
+        .attr("x2", leftX)
+        .attr("y2", leftY);
+
+      d3.select("#eyeline2")
+        .attr("x1",data.x)
+        .attr("y1",data.y)
+        .attr("x2", rightX)
+        .attr("y2", rightY);
+    } catch (e){
+      // ignore si indices no existen
+    }
+
+    d3.select("#predictionSquare")
+      .attr("x",data.x)
+      .attr("y",data.y);
+
+    // --- MÉTRICAS ---
+    // timestamp
+    const t = clock || performance.now();
+    frameCount++;
+    document.getElementById('frames').innerText = frameCount;
+
+    // gaze (predicción) actual
+    const gaze = { x: data.x, y: data.y, t: t };
+
+    // head orientation estimado por la malla: usamos vector entre ojos y nariz para aproximar yaw
+    let headAngle = null; // grados
+    try {
+      const nosePt = fmPositions[1] || fmPositions[4];
+      const left = fmPositions[33] || fmPositions[145];
+      const right = fmPositions[263] || fmPositions[374];
+      if (nosePt && left && right) {
+        // coordenadas relacionadas con preview ratio
+        const nx = previewWidth - nosePt[0] * whr[0];
+        const ny = nosePt[1] * whr[1];
+        const lx = previewWidth - left[0] * whr[0];
+        const rx = previewWidth - right[0] * whr[0];
+        // eje horizontal: vector entre ojos
+        const midEyesX = (lx + rx)/2;
+        const midEyesY = ( (left[1] + right[1]) / 2 ) * whr[1];
+        // vector nose <- midEyes
+        const vx = nx - midEyesX;
+        const vy = ny - midEyesY;
+        // angle in radians relative to vertical (approx yaw/pitch mixture)
+        headAngle = Math.atan2(vx, vy) * 180 / Math.PI; // signo y orientación arbitraria
+      }
+    } catch(e) {
+      headAngle = null;
+    }
+
+    // velocidades aproximadas
+    let headVel = 0;
+    let eyeVel = 0;
+    if (lastTimestamp !== null) {
+      const dt = (t - lastTimestamp)/1000.0; // s
+      if (headAngle !== null && lastHeadAngle !== null && dt > 0) {
+        headVel = (headAngle - lastHeadAngle) / dt; // deg/s
+      }
+      if (lastGaze !== null) {
+        const dx = (gaze.x - lastGaze.x);
+        const dy = (gaze.y - lastGaze.y);
+        eyeVel = Math.sqrt(dx*dx + dy*dy) / dt; // px/s
+      }
+    }
+
+    // latencia estimada (muy aproximada): tiempo entre cambio de headAngle y cambio de gaze sign
+    // método simple: si detectamos un pico de headVel, medimos cuándo gazeVel responde. Guardamos dif.
+    if (Math.abs(headVel) > 50 && lastTimestamp !== null) { // umbral head
+      // registra tiempo del "evento de cabeza"
+      latencyEstimates.push({tHead: t, headVel: headVel, responded: false});
+    }
+    // buscar eventos pendientes y marcar respuesta si gaze cambia > umbral
+    for (let ev of latencyEstimates) {
+      if (!ev.responded && Math.abs(eyeVel) > 200) {
+        ev.responded = true;
+        ev.tRespond = t;
+        ev.latencyMs = ev.tRespond - ev.tHead;
+      }
+    }
+
+    // conteo de sacadas simple
+    if (eyeVel > SACCADE_VEL_THRESHOLD) {
+      saccCount++;
+      document.getElementById('saccCount').innerText = saccCount;
+    }
+
+    // fijación: RMS en ventana corta
+    fixPositions.push({x:gaze.x, y:gaze.y, t:t});
+    // mantener solo ventana SAMPLE_WINDOW_MS
+    const cutoff = t - SAMPLE_WINDOW_MS;
+    fixPositions = fixPositions.filter(p => p.t >= cutoff);
+    const xs = fixPositions.map(p=>p.x - mean(fixPositions.map(q=>q.x)));
+    const ys = fixPositions.map(p=>p.y - mean(fixPositions.map(q=>q.y)));
+    const rmsVal = rms(xs.concat(ys));
+
+    // VOR gain aproximado: ratio eyeVel / headVel (módulo); en VOR esperado la ganancia ~1 (ojo contramovimiento)
+    let vorGain = null;
+    if (Math.abs(headVel) > 5) { // evitar división por cero
+      vorGain = Math.abs(eyeVel) / Math.abs(headVel);
+    }
+
+    // actualizar UI
+    document.getElementById('headVel').innerText = headVel ? headVel.toFixed(1) : '-';
+    document.getElementById('eyeVel').innerText = eyeVel ? Math.round(eyeVel) : '-';
+    document.getElementById('vorGain').innerText = vorGain ? vorGain.toFixed(2) : '-';
+    const latSamples = latencyEstimates.filter(e=>e.latencyMs).map(e=>e.latencyMs);
+    document.getElementById('latency').innerText = latSamples.length ? Math.round(mean(latSamples)) + ' ms' : '-';
+    document.getElementById('fixRMS').innerText = rmsVal ? Math.round(rmsVal) + ' px' : '-';
+
+    // guardar muestra si sesión activa
+    if (sessionActive) {
+      recorded.push({
+        t: t,
+        gazeX: gaze.x,
+        gazeY: gaze.y,
+        headAngle: headAngle,
+        headVel: headVel,
+        eyeVel: eyeVel,
+        vorGain: vorGain,
+        latencySamples: latSamples.slice(-5)
+      });
+      document.getElementById('btnExport').disabled = false;
+    }
+
+    // actualizar referencias previas
+    lastHeadAngle = headAngle;
+    lastGaze = gaze;
+    lastTimestamp = t;
+  };
+
+  // ---------------------------
+  // Calibración simple (9 puntos)
+  // ---------------------------
+  function startCalibration(){
+    const grid = document.getElementById('calibrationGrid');
+    grid.innerHTML = '';
+    grid.style.display = 'block';
+    const w = window.innerWidth, h = window.innerHeight;
+    const points = [
+      [0.1,0.1],[0.5,0.1],[0.9,0.1],
+      [0.1,0.5],[0.5,0.5],[0.9,0.5],
+      [0.1,0.9],[0.5,0.9],[0.9,0.9]
+    ];
+    let idx = 0;
+    document.getElementById('statusText').innerText = 'calibrando: haz click en cada punto y mira fijamente 1.5s';
+    points.forEach((p,i) => {
+      const el = document.createElement('div');
+      el.className = 'calPoint';
+      el.style.left = (p[0]*100) + '%';
+      el.style.top  = (p[1]*100) + '%';
+      el.innerText = (i+1);
+      el.onclick = async function(){
+        // esperar 1200ms de fijación
+        el.style.background = '#0f0';
+        const t0 = performance.now();
+        const samples = [];
+        while (performance.now() - t0 < 1200) {
+          const pred = await webgazer.getCurrentPrediction();
+          if (pred) samples.push(pred);
+          await new Promise(r=>setTimeout(r,80));
+        }
+        // alimentar calibración de webgazer (si API disponible)
+        // webgazer.recordScreenPosition? (dependiendo de la versión) -> aquí hacemos add of samples to storage for manual mapping
+        el.style.background = '#0af';
+      };
+      grid.appendChild(el);
+    });
+
+    // agregar botón finalizar
+    const end = document.createElement('button');
+    end.innerText = 'Finalizar calibración';
+    end.style.position='absolute';
+    end.style.left='50%';
+    end.style.bottom='6%';
+    end.style.transform='translateX(-50%)';
+    end.onclick = function(){
+      grid.style.display='none';
+      document.getElementById('statusText').innerText = 'calibración finalizada (aprox)';
+    };
+    grid.appendChild(end);
+  }
+
+  // ---------------------------
+  // Session control, export
+  // ---------------------------
+  function startSession(){
+    sessionActive = true;
+    recorded = [];
+    frameCount = 0;
+    saccCount = 0;
+    lastHeadAngle = null;
+    lastGaze = null;
+    lastTimestamp = null;
+    latencyEstimates = [];
+    fixPositions = [];
+    document.getElementById('btnStop').disabled = false;
+    document.getElementById('btnStart').disabled = true;
+    document.getElementById('statusText').innerText = 'sesión activa';
+    document.getElementById('saccCount').innerText = '0';
+  }
+
+  function stopSession(){
+    sessionActive = false;
+    document.getElementById('btnStop').disabled = true;
+    document.getElementById('btnStart').disabled = false;
+    document.getElementById('statusText').innerText = 'sesión detenida';
+    document.getElementById('btnExport').disabled = recorded.length === 0;
+  }
+
+  function exportCSV(){
+    if (!recorded || recorded.length === 0) return alert('No hay datos para exportar.');
+    const header = Object.keys(recorded[0]);
+    const csv = [header.join(',')].concat(
+      recorded.map(r => header.map(h => JSON.stringify(r[h]===undefined ? '' : r[h])).join(','))
+    ).join('\n');
+    const blob = new Blob([csv], {type: 'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const link = document.getElementById('downloadLink');
+    link.href = url;
+    link.download = 'vor_session_' + (new Date()).toISOString().replace(/[:.]/g,'_') + '.csv';
+    link.style.display = 'inline-block';
+    link.click();
+    document.getElementById('btnExport').disabled = false;
+  }
+
+  function togglePreview(){
+    const current = webgazer.params.showVideoPreview;
+    webgazer.showVideoPreview(!current);
+  }
+
+  // ---------------------------
+  // Buenas prácticas / warnings
+  // ---------------------------
+  // - Pedir permiso cámara (webgazer lo hace).
+  // - Ambiente bien iluminado y cámara fija.
+  // - Mantener distancia y registrar la resolución / tamaño de pantalla para comparar sesiones.
+  // - Los valores de umbral son heurísticos; ajustar en tests.
+  // ---------------------------
+
+  </script>
 </body>
 </html>
