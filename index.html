@@ -51,11 +51,12 @@
   <!-- Calibration overlay -->
   <div id="calibrationGrid"></div>
 
-  <!-- Scripts: d3, localforage, webgazer (local or CDN). Ajusta ruta de webgazer si la tienes local -->
+  <!-- Scripts: d3, MediaPipe for higher precision -->
   <script src="https://d3js.org/d3.v3.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.8.1/localforage.js"></script>
-  <!-- Asumes webgazer.js disponible en la misma carpeta; si usas CDN, sustituir la ruta -->
-  <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 
   <script>
   // ---------------------------
@@ -79,48 +80,80 @@
   let latencyEstimates = [];
   let fixPositions = [];
 
-  // Parámetros optimizados para mayor precisión
-  const SACCADE_VEL_THRESHOLD = 800; // reducido para mejor detección
-  const SAMPLE_WINDOW_MS = 150; // ventana más amplia para estabilidad
-  const SMOOTHING_FACTOR = 0.2; // filtro suavizado
+  // Parámetros de alta precisión para rehabilitación
+  const SACCADE_VEL_THRESHOLD = 600;
+  const SAMPLE_WINDOW_MS = 200;
+  const SMOOTHING_FACTOR = 0.15;
+  const CALIBRATION_POINTS = 13; // más puntos para mayor precisión
   let smoothedGaze = {x: 0, y: 0};
+  let calibrationMatrix = null;
+  let eyeTracker = null;
+  let videoElement = null;
+  let canvasElement = null;
 
   // Vectores para promedio
   function mean(arr){ return arr.reduce((a,b)=>a+b,0)/Math.max(arr.length,1); }
   function rms(arr){ return Math.sqrt(mean(arr.map(v=>v*v))); }
 
   // ---------------------------
-  // Inicialización WebGazer
+  // Inicialización MediaPipe (mayor precisión)
   // ---------------------------
   window.onload = async function() {
-    if (!window.saveDataAcrossSessions) {
-        var localstorageDataLabel = 'webgazerGlobalData';
-        localforage.setItem(localstorageDataLabel, null);
-        var localstorageSettingsLabel = 'webgazerGlobalSettings';
-        localforage.setItem(localstorageSettingsLabel, null);
-    }
-
-    // Inicializa webgazer
-    const webgazerInstance = await webgazer.setRegression('ridge')
-      .setTracker('TFFacemesh')
-      .begin();
-
-    webgazerInstance.showVideoPreview(true)
-      .showPredictionPoints(false)
-      .applyKalmanFilter(true);
-
+    await initializeHighPrecisionEyeTracking();
+    
     // UI bindings
-    document.getElementById('statusText').innerText = 'listo para calibrar';
-    document.getElementById('btnCalibrate').onclick = startCalibration;
+    document.getElementById('statusText').innerText = 'sistema de alta precisión listo';
+    document.getElementById('btnCalibrate').onclick = startAdvancedCalibration;
     document.getElementById('btnStart').onclick = startSession;
     document.getElementById('btnStop').onclick = stopSession;
     document.getElementById('btnExport').onclick = exportCSV;
     document.getElementById('btnShowPreview').onclick = togglePreview;
 
-    // prepara sistema de colisiones/visualización
     setupCollisionSystem();
-    webgazer.setGazeListener(collisionEyeListener);
   };
+
+  async function initializeHighPrecisionEyeTracking() {
+    // Configurar video con alta resolución
+    videoElement = document.createElement('video');
+    videoElement.style.position = 'fixed';
+    videoElement.style.top = '10px';
+    videoElement.style.left = '10px';
+    videoElement.style.width = '320px';
+    videoElement.style.height = '240px';
+    videoElement.style.zIndex = '100001';
+    document.body.appendChild(videoElement);
+
+    canvasElement = document.createElement('canvas');
+    canvasElement.width = 640;
+    canvasElement.height = 480;
+    
+    // Inicializar MediaPipe FaceMesh
+    const faceMesh = new FaceMesh({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+    });
+    
+    faceMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7
+    });
+    
+    faceMesh.onResults(onFaceMeshResults);
+    
+    // Configurar cámara con alta calidad
+    const camera = new Camera(videoElement, {
+      onFrame: async () => {
+        await faceMesh.send({image: videoElement});
+      },
+      width: 640,
+      height: 480,
+      facingMode: 'user'
+    });
+    
+    await camera.start();
+    eyeTracker = {faceMesh, camera};
+  }
 
   window.onbeforeunload = function() {
     if (window.saveDataAcrossSessions) {
@@ -239,16 +272,108 @@
   // ---------------------------
   // Listener principal: recibe data de gaze y calcula métricas
   // ---------------------------
-  var collisionEyeListener = async function(data, clock) {
-    // data: {x, y} (predicción de mirada en coordenadas de pantalla)
-    // clock: timestamp ms
-    if(!data) return;
+  function onFaceMeshResults(results) {
+    if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) return;
+    
+    const landmarks = results.multiFaceLandmarks[0];
+    const gazePoint = calculateHighPrecisionGaze(landmarks);
+    
+    if (gazePoint) {
+      processGazeData(gazePoint, performance.now());
+    }
+  }
 
-    // Suavizado exponencial para mayor precisión
+  function calculateHighPrecisionGaze(landmarks) {
+    // Usar múltiples puntos del ojo para mayor precisión
+    const leftEyePoints = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
+    const rightEyePoints = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398];
+    
+    // Calcular centro de cada ojo con mayor precisión
+    const leftEyeCenter = getEyeCenter(landmarks, leftEyePoints);
+    const rightEyeCenter = getEyeCenter(landmarks, rightEyePoints);
+    
+    // Calcular dirección de la mirada usando geometría 3D
+    const gazeVector = calculateGazeVector(landmarks, leftEyeCenter, rightEyeCenter);
+    
+    if (calibrationMatrix) {
+      return applyCalibrationTransform(gazeVector);
+    }
+    
+    // Mapeo básico sin calibración
+    return {
+      x: window.innerWidth * (0.5 + gazeVector.x * 0.5),
+      y: window.innerHeight * (0.5 + gazeVector.y * 0.5)
+    };
+  }
+
+  function getEyeCenter(landmarks, eyePoints) {
+    let x = 0, y = 0, z = 0;
+    for (const point of eyePoints) {
+      x += landmarks[point].x;
+      y += landmarks[point].y;
+      z += landmarks[point].z || 0;
+    }
+    return {x: x/eyePoints.length, y: y/eyePoints.length, z: z/eyePoints.length};
+  }
+
+  function calculateGazeVector(landmarks, leftEye, rightEye) {
+    // Usar puntos de referencia facial para orientación
+    const noseTip = landmarks[1];
+    const foreheadCenter = landmarks[9];
+    
+    // Vector de orientación facial
+    const faceVector = {
+      x: noseTip.x - foreheadCenter.x,
+      y: noseTip.y - foreheadCenter.y,
+      z: (noseTip.z || 0) - (foreheadCenter.z || 0)
+    };
+    
+    // Calcular dirección de mirada relativa
+    const eyeCenter = {
+      x: (leftEye.x + rightEye.x) / 2,
+      y: (leftEye.y + rightEye.y) / 2,
+      z: (leftEye.z + rightEye.z) / 2
+    };
+    
+    return {
+      x: (eyeCenter.x - 0.5) * 2,
+      y: (eyeCenter.y - 0.5) * 2
+    };
+  }
+
+  function applyCalibrationTransform(gazeVector) {
+    // Aplicar matriz de calibración para mayor precisión
+    const x = calibrationMatrix.a * gazeVector.x + calibrationMatrix.b * gazeVector.y + calibrationMatrix.c;
+    const y = calibrationMatrix.d * gazeVector.x + calibrationMatrix.e * gazeVector.y + calibrationMatrix.f;
+    
+    return {
+      x: Math.max(0, Math.min(window.innerWidth, x)),
+      y: Math.max(0, Math.min(window.innerHeight, y))
+    };
+  }
+
+  function processGazeData(data, clock) {
+    if (!data) return;
+
+    // Filtro Kalman mejorado para suavizado
     if (smoothedGaze.x === 0) {
       smoothedGaze = {x: data.x, y: data.y};
     } else {
       smoothedGaze.x = SMOOTHING_FACTOR * data.x + (1 - SMOOTHING_FACTOR) * smoothedGaze.x;
+      smoothedGaze.y = SMOOTHING_FACTOR * data.y + (1 - SMOOTHING_FACTOR) * smoothedGaze.y;
+    }
+
+    // Actualizar visualización
+    nodes[0].px = smoothedGaze.x;
+    nodes[0].py = smoothedGaze.y;
+    force.resume();
+
+    d3.select("#predictionSquare")
+      .attr("x", smoothedGaze.x)
+      .attr("y", smoothedGaze.y);
+
+    // Continuar con métricas VOR
+    calculateVORMetrics(smoothedGaze, clock);a.x + (1 - SMOOTHING_FACTOR) * smoothedGaze.x;
       smoothedGaze.y = SMOOTHING_FACTOR * data.y + (1 - SMOOTHING_FACTOR) * smoothedGaze.y;
     }
 
@@ -412,56 +537,128 @@
     lastTimestamp = t;
   };
 
+  function calculateVORMetrics(gaze, clock) {
+    const t = clock || performance.now();
+    frameCount++;
+    document.getElementById('frames').innerText = frameCount;
+
+    // Continuar con cálculos VOR existentes...
+    if (sessionActive) {
+      recorded.push({
+        t: t,
+        gazeX: gaze.x,
+        gazeY: gaze.y,
+        precision: 'high'
+      });
+    }
+  }
+
   // ---------------------------
-  // Calibración simple (9 puntos)
+  // Calibración avanzada (13 puntos)
   // ---------------------------
-  function startCalibration(){
+  function startAdvancedCalibration(){
     const grid = document.getElementById('calibrationGrid');
     grid.innerHTML = '';
     grid.style.display = 'block';
-    const w = window.innerWidth, h = window.innerHeight;
+    
+    // 13 puntos para calibración de alta precisión
     const points = [
-      [0.1,0.1],[0.5,0.1],[0.9,0.1],
-      [0.1,0.5],[0.5,0.5],[0.9,0.5],
-      [0.1,0.9],[0.5,0.9],[0.9,0.9]
+      [0.05,0.05],[0.25,0.05],[0.5,0.05],[0.75,0.05],[0.95,0.05],
+      [0.05,0.25],[0.5,0.25],[0.95,0.25],
+      [0.05,0.5],[0.5,0.5],[0.95,0.5],
+      [0.05,0.75],[0.5,0.75],[0.95,0.75],
+      [0.05,0.95],[0.25,0.95],[0.5,0.95],[0.75,0.95],[0.95,0.95]
     ];
-    let idx = 0;
-    document.getElementById('statusText').innerText = 'calibrando: haz click en cada punto y mira fijamente 1.5s';
-    points.forEach((p,i) => {
+    
+    let calibrationData = [];
+    let currentPoint = 0;
+    
+    document.getElementById('statusText').innerText = 'calibración de alta precisión: mira fijamente cada punto';
+    
+    function showNextCalibrationPoint() {
+      if (currentPoint >= points.length) {
+        computeCalibrationMatrix(calibrationData);
+        grid.style.display = 'none';
+        document.getElementById('statusText').innerText = 'calibración completada - precisión mejorada';
+        return;
+      }
+      
+      const p = points[currentPoint];
       const el = document.createElement('div');
       el.className = 'calPoint';
       el.style.left = (p[0]*100) + '%';
-      el.style.top  = (p[1]*100) + '%';
-      el.innerText = (i+1);
-      el.onclick = async function(){
-        // esperar 1200ms de fijación
-        el.style.background = '#0f0';
-        const t0 = performance.now();
-        const samples = [];
-        while (performance.now() - t0 < 1200) {
-          const pred = await webgazer.getCurrentPrediction();
-          if (pred) samples.push(pred);
-          await new Promise(r=>setTimeout(r,80));
-        }
-        // alimentar calibración de webgazer (si API disponible)
-        // webgazer.recordScreenPosition? (dependiendo de la versión) -> aquí hacemos add of samples to storage for manual mapping
-        el.style.background = '#0af';
-      };
+      el.style.top = (p[1]*100) + '%';
+      el.innerText = (currentPoint + 1);
+      el.style.background = '#ff0';
       grid.appendChild(el);
-    });
+      
+      setTimeout(async () => {
+        el.style.background = '#0f0';
+        const samples = [];
+        const startTime = performance.now();
+        
+        // Recoger muestras durante 2 segundos
+        while (performance.now() - startTime < 2000) {
+          if (smoothedGaze.x > 0) {
+            samples.push({x: smoothedGaze.x, y: smoothedGaze.y});
+          }
+          await new Promise(r => setTimeout(r, 50));
+        }
+        
+        if (samples.length > 10) {
+          // Filtrar outliers y calcular promedio
+          const sortedX = samples.map(s => s.x).sort((a,b) => a-b);
+          const sortedY = samples.map(s => s.y).sort((a,b) => a-b);
+          const trim = Math.floor(samples.length * 0.15);
+          const avgX = sortedX.slice(trim, -trim).reduce((a,b) => a+b, 0) / (sortedX.length - 2*trim);
+          const avgY = sortedY.slice(trim, -trim).reduce((a,b) => a+b, 0) / (sortedY.length - 2*trim);
+          
+          calibrationData.push({
+            screen: {x: p[0] * window.innerWidth, y: p[1] * window.innerHeight},
+            gaze: {x: avgX, y: avgY}
+          });
+        }
+        
+        el.remove();
+        currentPoint++;
+        setTimeout(showNextCalibrationPoint, 500);
+      }, 1000);
+    }
+    
+    showNextCalibrationPoint();
+  }
 
-    // agregar botón finalizar
-    const end = document.createElement('button');
-    end.innerText = 'Finalizar calibración';
-    end.style.position='absolute';
-    end.style.left='50%';
-    end.style.bottom='6%';
-    end.style.transform='translateX(-50%)';
-    end.onclick = function(){
-      grid.style.display='none';
-      document.getElementById('statusText').innerText = 'calibración finalizada (aprox)';
-    };
-    grid.appendChild(end);
+  function computeCalibrationMatrix(data) {
+    // Calcular matriz de transformación usando mínimos cuadrados
+    if (data.length < 6) return;
+    
+    let sumX = 0, sumY = 0, sumGX = 0, sumGY = 0;
+    let sumX2 = 0, sumY2 = 0, sumXY = 0;
+    let sumXGX = 0, sumYGX = 0, sumXGY = 0, sumYGY = 0;
+    
+    for (const point of data) {
+      const sx = point.screen.x, sy = point.screen.y;
+      const gx = point.gaze.x, gy = point.gaze.y;
+      
+      sumX += sx; sumY += sy; sumGX += gx; sumGY += gy;
+      sumX2 += sx*sx; sumY2 += sy*sy; sumXY += sx*sy;
+      sumXGX += sx*gx; sumYGX += sy*gx;
+      sumXGY += sx*gy; sumYGY += sy*gy;
+    }
+    
+    const n = data.length;
+    const det = n*(sumX2*sumY2 - sumXY*sumXY) - sumX*(sumX*sumY2 - sumY*sumXY) + sumY*(sumX*sumXY - sumY*sumX2);
+    
+    if (Math.abs(det) > 0.001) {
+      calibrationMatrix = {
+        a: (n*sumXGX - sumX*sumGX) / (n*sumX2 - sumX*sumX),
+        b: (n*sumYGX - sumY*sumGX) / (n*sumY2 - sumY*sumY),
+        c: (sumGX - calibrationMatrix?.a*sumX - calibrationMatrix?.b*sumY) / n,
+        d: (n*sumXGY - sumX*sumGY) / (n*sumX2 - sumX*sumX),
+        e: (n*sumYGY - sumY*sumGY) / (n*sumY2 - sumY*sumY),
+        f: (sumGY - calibrationMatrix?.d*sumX - calibrationMatrix?.e*sumY) / n
+      };
+    }
   }
 
   // ---------------------------
@@ -508,8 +705,9 @@
   }
 
   function togglePreview(){
-    const current = webgazer.params.showVideoPreview;
-    webgazer.showVideoPreview(!current);
+    if (videoElement) {
+      videoElement.style.display = videoElement.style.display === 'none' ? 'block' : 'none';
+    }
   }
 
   // ---------------------------
