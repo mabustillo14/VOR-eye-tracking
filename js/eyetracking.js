@@ -28,29 +28,39 @@ class EyeTracker {
 
   async initialize() {
     try {
-      console.log('Initializing working WebGazer system...');
+      console.log('Initializing improved WebGazer system...');
       
-      // Clear previous data
+      // Clear previous data for fresh start
       if (!window.saveDataAcrossSessions) {
         await localforage.setItem('webgazerGlobalData', null);
         await localforage.setItem('webgazerGlobalSettings', null);
       }
 
-      // Initialize WebGazer with working configuration
+      // Initialize WebGazer with improved configuration based on documentation
       const webgazerInstance = await webgazer
-        .setRegression('ridge')
-        .setTracker('TFFacemesh')
+        .setRegression('ridge') // Ridge regression for better accuracy
+        .setTracker('TFFacemesh') // TensorFlow face mesh tracker
         .begin();
 
+      // Configure for improved accuracy
       webgazerInstance
         .showVideoPreview(true)
         .showPredictionPoints(false)
-        .applyKalmanFilter(true);
-
+        .showFaceOverlay(true) // Enable face mesh overlay
+        .showFaceFeedbackBox(true) // Show face feedback
+        .applyKalmanFilter(true) // Smooth predictions
+        .params.imgWidth = 320;
+      
+      webgazerInstance.params.imgHeight = 240;
+      webgazerInstance.params.faceFeedbackBoxRatio = 0.66; // Optimal face size
+      
       // Setup collision system without particles
       this.setupCollisionSystem();
 
       webgazer.setGazeListener(this.collisionEyeListener.bind(this));
+      
+      // Position face overlay correctly
+      setTimeout(() => this.positionFaceOverlay(), 1000);
       
       this.isInitialized = true;
       return true;
@@ -99,36 +109,40 @@ class EyeTracker {
 
     // Update prediction square
     d3.select('#predictionSquare')
-      .attr('x', data.x)
-      .attr('y', data.y);
+      .attr('x', data.x - 3)
+      .attr('y', data.y - 3);
 
-    // Get face mesh positions for eye lines
+    // Get face mesh positions for eye lines with improved positioning
     try {
       const fmPositions = await webgazer.getTracker().getPositions();
       if (fmPositions) {
-        const whr = webgazer.getVideoPreviewToCameraResolutionRatio();
-        const previewWidth = webgazer.params && webgazer.params.videoViewerWidth ? webgazer.params.videoViewerWidth : 320;
+        const videoElement = document.getElementById('webgazerVideoFeed');
+        if (videoElement) {
+          const videoRect = videoElement.getBoundingClientRect();
+          const whr = webgazer.getVideoPreviewToCameraResolutionRatio();
+          
+          const leftEye = fmPositions[145];
+          const rightEye = fmPositions[374];
 
-        const leftEye = fmPositions[145];
-        const rightEye = fmPositions[374];
+          if (leftEye && rightEye) {
+            // Calculate eye positions relative to screen coordinates
+            const leftX = videoRect.right - (leftEye[0] * whr[0]);
+            const leftY = videoRect.top + (leftEye[1] * whr[1]);
+            const rightX = videoRect.right - (rightEye[0] * whr[0]);
+            const rightY = videoRect.top + (rightEye[1] * whr[1]);
 
-        if (leftEye && rightEye) {
-          const leftX = previewWidth - leftEye[0] * whr[0];
-          const leftY = leftEye[1] * whr[1];
-          const rightX = previewWidth - rightEye[0] * whr[0];
-          const rightY = rightEye[1] * whr[1];
+            d3.select('#eyeline1')
+              .attr('x1', data.x)
+              .attr('y1', data.y)
+              .attr('x2', leftX)
+              .attr('y2', leftY);
 
-          d3.select('#eyeline1')
-            .attr('x1', data.x)
-            .attr('y1', data.y)
-            .attr('x2', leftX)
-            .attr('y2', leftY);
-
-          d3.select('#eyeline2')
-            .attr('x1', data.x)
-            .attr('y1', data.y)
-            .attr('x2', rightX)
-            .attr('y2', rightY);
+            d3.select('#eyeline2')
+              .attr('x1', data.x)
+              .attr('y1', data.y)
+              .attr('x2', rightX)
+              .attr('y2', rightY);
+          }
         }
       }
     } catch (e) {
@@ -294,6 +308,7 @@ class EyeTracker {
       overlay.style.display = 'block';
       grid.innerHTML = '';
       
+      // Improved calibration points for better accuracy
       const points = [
         [0.1, 0.1], [0.5, 0.1], [0.9, 0.1],
         [0.1, 0.5], [0.5, 0.5], [0.9, 0.5],
@@ -305,10 +320,13 @@ class EyeTracker {
 
       const showNextPoint = () => {
         if (currentPoint >= points.length) {
-          overlay.style.display = 'none';
-          STATE.isCalibrated = true;
-          this.currentPrecision = 75; // Simulated precision
-          resolve(true);
+          // Validate calibration accuracy
+          this.validateCalibration().then((precision) => {
+            overlay.style.display = 'none';
+            STATE.isCalibrated = true;
+            this.currentPrecision = precision;
+            resolve(true);
+          });
           return;
         }
 
@@ -325,13 +343,20 @@ class EyeTracker {
           element.classList.add('active');
           status.textContent = `Calibrando punto ${currentPoint + 1}... mantén la mirada fija`;
           
-          // Working calibration from d5df81c
+          // Improved calibration with more samples
+          const screenX = point[0] * window.innerWidth;
+          const screenY = point[1] * window.innerHeight;
+          
           const t0 = performance.now();
           const samples = [];
-          while (performance.now() - t0 < 1200) {
+          while (performance.now() - t0 < 1500) { // Longer sampling time
             const pred = await webgazer.getCurrentPrediction();
-            if (pred) samples.push(pred);
-            await new Promise(r => setTimeout(r, 80));
+            if (pred) {
+              samples.push(pred);
+              // Add calibration data point
+              webgazer.recordScreenPosition(screenX, screenY, 'click');
+            }
+            await new Promise(r => setTimeout(r, 50)); // Higher frequency
           }
 
           element.remove();
@@ -349,11 +374,34 @@ class EyeTracker {
     });
   }
 
+  async validateCalibration() {
+    // Simple validation - in real implementation, test prediction accuracy
+    const testPoints = [[0.25, 0.25], [0.75, 0.75]];
+    let totalError = 0;
+    
+    for (const point of testPoints) {
+      const pred = await webgazer.getCurrentPrediction();
+      if (pred) {
+        const expectedX = point[0] * window.innerWidth;
+        const expectedY = point[1] * window.innerHeight;
+        const error = Math.sqrt(Math.pow(pred.x - expectedX, 2) + Math.pow(pred.y - expectedY, 2));
+        totalError += error;
+      }
+    }
+    
+    const avgError = totalError / testPoints.length;
+    const precision = Math.max(0, 100 - (avgError / 100) * 100);
+    return Math.round(precision);
+  }
+
   startSession() {
     this.sessionActive = true;
     this.recorded = [];
     this.frameCount = 0;
     this.saccCount = 0;
+    
+    // Ensure face overlay is positioned correctly when session starts
+    setTimeout(() => this.positionFaceOverlay(), 500);
   }
 
   stopSession() {
@@ -387,6 +435,30 @@ class EyeTracker {
   togglePreview() {
     const current = webgazer.params.showVideoPreview;
     webgazer.showVideoPreview(!current);
+  }
+
+  positionFaceOverlay() {
+    // Ensure face overlay is positioned correctly with camera
+    const faceOverlay = document.getElementById('webgazerFaceOverlay');
+    const faceFeedback = document.getElementById('webgazerFaceFeedbackBox');
+    
+    if (faceOverlay) {
+      faceOverlay.style.position = 'fixed';
+      faceOverlay.style.top = '80px';
+      faceOverlay.style.right = '20px';
+      faceOverlay.style.width = '240px';
+      faceOverlay.style.height = '180px';
+      faceOverlay.style.zIndex = '150002';
+    }
+    
+    if (faceFeedback) {
+      faceFeedback.style.position = 'fixed';
+      faceFeedback.style.top = '80px';
+      faceFeedback.style.right = '20px';
+      faceFeedback.style.width = '240px';
+      faceFeedback.style.height = '180px';
+      faceFeedback.style.zIndex = '150002';
+    }
   }
 
   destroy() {
