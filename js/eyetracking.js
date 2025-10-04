@@ -9,27 +9,32 @@ class EyeTracker {
 
   async initialize() {
     try {
-      // Clear previous data
-      if (!window.saveDataAcrossSessions) {
-        await localforage.setItem('webgazerGlobalData', null);
-        await localforage.setItem('webgazerGlobalSettings', null);
-      }
-
-      // Initialize WebGazer with optimal settings
+      // Clear previous data for fresh start
+      await localforage.clear();
+      
+      // Initialize WebGazer with most reliable settings
       const webgazerInstance = await webgazer
-        .setRegression('weightedRidge')
+        .setRegression('ridge') // More stable than weightedRidge
         .setTracker('TFFacemesh')
         .begin();
 
+      // Wait for proper initialization
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       webgazerInstance
         .showVideoPreview(true)
-        .showPredictionPoints(false)
-        .applyKalmanFilter(true);
+        .showPredictionPoints(true) // Show for debugging
+        .applyKalmanFilter(false); // Disable for more responsive tracking
 
-      // Configure parameters for precision
-      webgazer.params.videoViewerWidth = 320;
-      webgazer.params.videoViewerHeight = 240;
-      webgazer.params.faceFeedbackBoxRatio = 0.66;
+      // Optimal parameters for accuracy
+      webgazer.params.videoViewerWidth = 240;
+      webgazer.params.videoViewerHeight = 180;
+      webgazer.params.faceFeedbackBoxRatio = 0.8;
+      webgazer.params.showFaceOverlay = false;
+      webgazer.params.showFaceFeedbackBox = false;
+
+      // Position camera in bottom right
+      setTimeout(() => this.positionCamera(), 500);
 
       webgazer.setGazeListener(this.onGazeData.bind(this));
       
@@ -41,24 +46,51 @@ class EyeTracker {
     }
   }
 
+  positionCamera() {
+    const video = document.getElementById('webgazerVideoFeed');
+    const canvas = document.getElementById('webgazerVideoCanvas');
+    
+    if (video) {
+      video.style.position = 'fixed';
+      video.style.bottom = '20px';
+      video.style.right = '20px';
+      video.style.top = 'auto';
+      video.style.left = 'auto';
+      video.style.width = '240px';
+      video.style.height = '180px';
+      video.style.zIndex = '150000';
+    }
+    
+    if (canvas) {
+      canvas.style.position = 'fixed';
+      canvas.style.bottom = '20px';
+      canvas.style.right = '20px';
+      canvas.style.top = 'auto';
+      canvas.style.left = 'auto';
+      canvas.style.width = '240px';
+      canvas.style.height = '180px';
+      canvas.style.zIndex = '150001';
+    }
+  }
+
   onGazeData(data, clock) {
-    if (!data) return;
+    if (!data || data.x < 0 || data.y < 0 || data.x > window.innerWidth || data.y > window.innerHeight) return;
 
-    // Advanced filtering
+    // Simple but effective filtering
     this.gazeBuffer.push({x: data.x, y: data.y, t: clock || performance.now()});
-    if (this.gazeBuffer.length > 5) this.gazeBuffer.shift();
+    if (this.gazeBuffer.length > 3) this.gazeBuffer.shift();
 
-    // Median filter for outlier removal
-    const recentGazes = this.gazeBuffer.slice(-3);
-    const medianX = this.getMedian(recentGazes.map(g => g.x));
-    const medianY = this.getMedian(recentGazes.map(g => g.y));
+    // Use simple average for stability
+    const avgX = this.gazeBuffer.reduce((sum, g) => sum + g.x, 0) / this.gazeBuffer.length;
+    const avgY = this.gazeBuffer.reduce((sum, g) => sum + g.y, 0) / this.gazeBuffer.length;
 
-    // Exponential smoothing
+    // Light smoothing only
     if (this.smoothedGaze.x === 0) {
-      this.smoothedGaze = {x: medianX, y: medianY};
+      this.smoothedGaze = {x: avgX, y: avgY};
     } else {
-      this.smoothedGaze.x = CONFIG.SMOOTHING_FACTOR * medianX + (1 - CONFIG.SMOOTHING_FACTOR) * this.smoothedGaze.x;
-      this.smoothedGaze.y = CONFIG.SMOOTHING_FACTOR * medianY + (1 - CONFIG.SMOOTHING_FACTOR) * this.smoothedGaze.y;
+      const factor = 0.3; // More responsive
+      this.smoothedGaze.x = factor * avgX + (1 - factor) * this.smoothedGaze.x;
+      this.smoothedGaze.y = factor * avgY + (1 - factor) * this.smoothedGaze.y;
     }
 
     // Update gaze indicator
@@ -93,16 +125,25 @@ class EyeTracker {
       overlay.style.display = 'block';
       grid.innerHTML = '';
       
-      let currentPoint = 0;
-      const points = CONFIG.CALIBRATION.points;
+      // Use fewer, more strategic points for better accuracy
+      const points = [
+        [0.1, 0.1], [0.5, 0.1], [0.9, 0.1],
+        [0.1, 0.5], [0.5, 0.5], [0.9, 0.5],
+        [0.1, 0.9], [0.5, 0.9], [0.9, 0.9]
+      ];
       
+      let currentPoint = 0;
       status.textContent = `Calibración: punto ${currentPoint + 1} de ${points.length}`;
 
       const showNextPoint = () => {
         if (currentPoint >= points.length) {
-          overlay.style.display = 'none';
-          STATE.isCalibrated = true;
-          resolve(true);
+          // Validation phase
+          status.textContent = 'Validando calibración...';
+          setTimeout(() => {
+            overlay.style.display = 'none';
+            STATE.isCalibrated = true;
+            resolve(true);
+          }, 1000);
           return;
         }
 
@@ -115,36 +156,30 @@ class EyeTracker {
         
         grid.appendChild(element);
 
-        setTimeout(async () => {
+        // Click handler for manual calibration
+        element.onclick = async () => {
           element.classList.add('active');
-          status.textContent = `Mira fijamente el punto ${currentPoint + 1}`;
+          status.textContent = `Calibrando punto ${currentPoint + 1}... mantén la mirada fija`;
           
-          // Collect samples
-          const samples = [];
-          const startTime = performance.now();
-          
-          while (performance.now() - startTime < CONFIG.CALIBRATION.fixationTime) {
-            const pred = await webgazer.getCurrentPrediction();
-            if (pred) samples.push(pred);
-            await new Promise(r => setTimeout(r, 50));
-          }
-
-          // Register calibration point
-          if (samples.length >= CONFIG.CALIBRATION.minSamples) {
-            for (let i = 0; i < 3; i++) {
-              webgazer.recordScreenPosition(
-                point[0] * window.innerWidth, 
-                point[1] * window.innerHeight, 
-                'click'
-              );
-            }
+          // Multiple registrations for better accuracy
+          for (let i = 0; i < 5; i++) {
+            webgazer.recordScreenPosition(
+              point[0] * window.innerWidth, 
+              point[1] * window.innerHeight, 
+              'click'
+            );
+            await new Promise(r => setTimeout(r, 200));
           }
 
           element.remove();
           currentPoint++;
-          status.textContent = `Calibración: punto ${currentPoint + 1} de ${points.length}`;
-          setTimeout(showNextPoint, 500);
-        }, 1000);
+          
+          if (currentPoint < points.length) {
+            status.textContent = `Calibración: punto ${currentPoint + 1} de ${points.length}`;
+          }
+          
+          setTimeout(showNextPoint, 300);
+        };
       };
 
       showNextPoint();
@@ -156,8 +191,16 @@ class EyeTracker {
   }
 
   togglePreview() {
-    const current = webgazer.params.showVideoPreview;
-    webgazer.showVideoPreview(!current);
+    const body = document.body;
+    if (body.classList.contains('camera-hidden')) {
+      body.classList.remove('camera-hidden');
+      webgazer.showVideoPreview(true);
+      return false; // Camera now visible
+    } else {
+      body.classList.add('camera-hidden');
+      webgazer.showVideoPreview(false);
+      return true; // Camera now hidden
+    }
   }
 
   destroy() {

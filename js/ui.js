@@ -23,6 +23,7 @@ class UIManager {
     // Modal buttons
     document.getElementById('btnExport')?.addEventListener('click', () => this.exportData());
     document.getElementById('btnNewSession')?.addEventListener('click', () => this.newSession());
+    document.getElementById('btnToggleVideo')?.addEventListener('click', () => this.toggleVideo());
 
     // Close modal when clicking outside
     document.getElementById('resultsModal')?.addEventListener('click', (e) => {
@@ -197,6 +198,16 @@ class UIManager {
     document.getElementById('progressFill').style.width = '0%';
   }
 
+  toggleVideo() {
+    if (STATE.eyeTracker) {
+      const isHidden = STATE.eyeTracker.togglePreview();
+      const btn = document.getElementById('btnToggleVideo');
+      if (btn) {
+        btn.textContent = isHidden ? 'Mostrar Cámara' : 'Ocultar Cámara';
+      }
+    }
+  }
+
   showMessage(message, type = 'info') {
     // Create temporary message element
     const messageEl = document.createElement('div');
@@ -205,14 +216,14 @@ class UIManager {
     messageEl.style.cssText = `
       position: fixed;
       top: 20px;
-      right: 20px;
+      left: 50%;
+      transform: translateX(-50%);
       padding: 12px 20px;
       border-radius: 6px;
       color: white;
       font-weight: 500;
       z-index: 10000;
       opacity: 0;
-      transform: translateX(100%);
       transition: all 0.3s ease;
     `;
 
@@ -230,13 +241,11 @@ class UIManager {
     // Animate in
     setTimeout(() => {
       messageEl.style.opacity = '1';
-      messageEl.style.transform = 'translateX(0)';
     }, 10);
 
     // Remove after 3 seconds
     setTimeout(() => {
       messageEl.style.opacity = '0';
-      messageEl.style.transform = 'translateX(100%)';
       setTimeout(() => {
         if (messageEl.parentNode) {
           messageEl.parentNode.removeChild(messageEl);
