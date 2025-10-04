@@ -418,16 +418,46 @@ button:disabled {
   margin-top: 20px;
 }
 
-/* AI Eye Tracking Camera */
-#eyeTrackingVideo {
+/* WebGazer Camera Positioning */
+#webgazerVideoFeed {
   position: fixed !important;
   bottom: 20px !important;
   right: 20px !important;
+  top: auto !important;
+  left: auto !important;
   width: 240px !important;
   height: 180px !important;
   z-index: 150000 !important;
   border: 2px solid #4CAF50 !important;
   border-radius: 8px !important;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-  object-fit: cover !important;
+}
+
+#webgazerVideoCanvas {
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 20px !important;
+  top: auto !important;
+  left: auto !important;
+  width: 240px !important;
+  height: 180px !important;
+  z-index: 150001 !important;
+  border: 2px solid #4CAF50 !important;
+  border-radius: 8px !important;
+}
+
+/* Collision System SVG */
+#collisionSVG {
+  background: transparent !important;
+  pointer-events: none !important;
+}
+
+/* WebGazer prediction points */
+.webgazerGazeDot {
+  background: #FF0000 !important;
+  border: 2px solid #FFFFFF !important;
+  border-radius: 50% !important;
+  width: 10px !important;
+  height: 10px !important;
+  z-index: 200001 !important;
 }

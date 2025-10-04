@@ -1,67 +1,51 @@
-// Professional eye tracking system with WebGazer-level calibration
+// WebGazer-based eye tracking with collision system and professional calibration
 class EyeTracker {
   constructor() {
     this.smoothedGaze = {x: 0, y: 0};
     this.isInitialized = false;
-    this.model = null;
-    this.video = null;
-    this.canvas = null;
-    this.ctx = null;
-    this.calibrationData = [];
     this.isRunning = false;
     this.precisionData = [];
     this.currentPrecision = null;
+    this.collisionSystem = null;
   }
 
   async initialize() {
     try {
-      console.log('Initializing professional eye tracking system...');
+      console.log('Initializing WebGazer with collision system...');
       
-      // Create video element
-      this.video = document.createElement('video');
-      this.video.id = 'eyeTrackingVideo';
-      this.video.width = 240;
-      this.video.height = 180;
-      this.video.autoplay = true;
-      this.video.muted = true;
-      this.video.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 240px;
-        height: 180px;
-        z-index: 150000;
-        border: 2px solid #4CAF50;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-      `;
-      document.body.appendChild(this.video);
+      // Clear previous data
+      if (!window.saveDataAcrossSessions) {
+        await localforage.setItem('webgazerGlobalData', null);
+        await localforage.setItem('webgazerGlobalSettings', null);
+      }
 
-      // Get camera stream
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          width: 640, 
-          height: 480,
-          facingMode: 'user'
-        }
-      });
-      this.video.srcObject = stream;
+      // Initialize WebGazer
+      const webgazerInstance = await webgazer
+        .setRegression('ridge')
+        .setTracker('TFFacemesh')
+        .begin();
 
-      // Load MediaPipe FaceMesh model
-      await tf.ready();
-      this.model = await faceLandmarksDetection.createDetector(
-        faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh,
-        {
-          runtime: 'tfjs',
-          maxFaces: 1,
-          refineLandmarks: true
-        }
-      );
+      webgazerInstance
+        .showVideoPreview(true)
+        .showPredictionPoints(true)
+        .applyKalmanFilter(true);
 
-      console.log('Professional eye tracking model loaded');
+      // Configure for collision experience
+      webgazer.params.videoViewerWidth = 240;
+      webgazer.params.videoViewerHeight = 180;
+      webgazer.params.faceFeedbackBoxRatio = 0.66;
+      webgazer.params.showFaceOverlay = true;
+      webgazer.params.showFaceFeedbackBox = true;
+
+      // Position camera in bottom right
+      setTimeout(() => this.positionCamera(), 1000);
+
+      // Setup collision system
+      this.setupCollisionSystem();
+
+      webgazer.setGazeListener(this.onGazeData.bind(this));
       
       this.isInitialized = true;
-      this.startTracking();
       return true;
     } catch (error) {
       console.error('Eye tracker initialization failed:', error);
@@ -69,164 +53,202 @@ class EyeTracker {
     }
   }
 
-  startTracking() {
-    if (!this.isInitialized || this.isRunning) return;
+  positionCamera() {
+    const video = document.getElementById('webgazerVideoFeed');
+    const canvas = document.getElementById('webgazerVideoCanvas');
     
-    this.isRunning = true;
-    
-    // Initialize gaze indicator
-    const indicator = document.getElementById('gazeIndicator');
-    if (indicator) {
-      indicator.style.display = 'block';
-      indicator.style.left = (window.innerWidth / 2) + 'px';
-      indicator.style.top = (window.innerHeight / 2) + 'px';
+    if (video) {
+      video.style.position = 'fixed';
+      video.style.bottom = '20px';
+      video.style.right = '20px';
+      video.style.top = 'auto';
+      video.style.left = 'auto';
+      video.style.width = '240px';
+      video.style.height = '180px';
+      video.style.zIndex = '150000';
+      video.style.border = '2px solid #4CAF50';
+      video.style.borderRadius = '8px';
     }
     
-    this.trackLoop();
+    if (canvas) {
+      canvas.style.position = 'fixed';
+      canvas.style.bottom = '20px';
+      canvas.style.right = '20px';
+      canvas.style.top = 'auto';
+      canvas.style.left = 'auto';
+      canvas.style.width = '240px';
+      canvas.style.height = '180px';
+      canvas.style.zIndex = '150001';
+      canvas.style.border = '2px solid #4CAF50';
+      canvas.style.borderRadius = '8px';
+    }
   }
 
-  async trackLoop() {
-    if (!this.isRunning) return;
+  setupCollisionSystem() {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const numberOfNodes = 100;
 
-    try {
-      const predictions = await this.model.estimateFaces(this.video, {
-        flipHorizontal: false
-      });
+    // Create nodes for collision system
+    this.nodes = d3.range(numberOfNodes).map(() => ({
+      radius: Math.random() * 12 + 4
+    }));
+    this.nodes[0].radius = 0;
+    this.nodes[0].fixed = true;
 
-      if (predictions.length > 0) {
-        const face = predictions[0];
-        const gaze = this.calculateGazeFromLandmarks(face);
-        
-        if (gaze) {
-          this.processGazeData(gaze);
+    // Setup D3 force layout
+    this.force = d3.layout.force()
+      .gravity(0.05)
+      .charge((d, i) => i ? 0 : -2000)
+      .nodes(this.nodes)
+      .size([width, height])
+      .start();
+
+    // Create SVG for collision visualization
+    const svg = d3.select('body').append('svg')
+      .attr('id', 'collisionSVG')
+      .attr('width', width)
+      .attr('height', height)
+      .style('position', 'absolute')
+      .style('top', '0px')
+      .style('left', '0px')
+      .style('z-index', '100000')
+      .style('pointer-events', 'none');
+
+    const color = d3.scale.category10();
+
+    // Add circles
+    svg.selectAll('circle')
+      .data(this.nodes.slice(1))
+      .enter().append('circle')
+      .attr('r', d => d.radius)
+      .style('fill', (d, i) => i === this.nodes.length - 2 ? 'orange' : color(0));
+
+    // Add gaze tracking lines
+    svg.append('line')
+      .attr('id', 'eyeline1')
+      .attr('stroke-width', 2)
+      .attr('stroke', 'red');
+
+    svg.append('line')
+      .attr('id', 'eyeline2')
+      .attr('stroke-width', 2)
+      .attr('stroke', 'red');
+
+    // Add prediction square
+    svg.append('rect')
+      .attr('id', 'predictionSquare')
+      .attr('width', 6)
+      .attr('height', 6)
+      .attr('fill', 'red');
+
+    // Force simulation tick
+    this.force.on('tick', (e) => {
+      const q = d3.geom.quadtree(this.nodes);
+      let i = 0;
+      const n = this.nodes.length;
+
+      while (++i < n) q.visit(this.collide(this.nodes[i]));
+
+      svg.selectAll('circle')
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y);
+    });
+
+    this.collisionSystem = { svg, force: this.force, nodes: this.nodes };
+  }
+
+  collide(node) {
+    const r = node.radius + 16;
+    const nx1 = node.x - r;
+    const nx2 = node.x + r;
+    const ny1 = node.y - r;
+    const ny2 = node.y + r;
+    
+    return (quad, x1, y1, x2, y2) => {
+      if (quad.point && (quad.point !== node)) {
+        let x = node.x - quad.point.x;
+        let y = node.y - quad.point.y;
+        let l = Math.sqrt(x * x + y * y);
+        const r = node.radius + quad.point.radius;
+        if (l < r) {
+          l = (l - r) / l * 0.5;
+          node.x -= x *= l;
+          node.y -= y *= l;
+          quad.point.x += x;
+          quad.point.y += y;
         }
       }
-    } catch (error) {
-      console.error('Tracking error:', error);
-    }
-
-    requestAnimationFrame(() => this.trackLoop());
+      return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
+    };
   }
 
-  calculateGazeFromLandmarks(face) {
+  async onGazeData(data, clock) {
+    if (!data) return;
+
+    // Update collision system
+    if (this.nodes) {
+      this.nodes[0].px = data.x;
+      this.nodes[0].py = data.y;
+      this.force.resume();
+    }
+
+    // Update prediction square
+    d3.select('#predictionSquare')
+      .attr('x', data.x)
+      .attr('y', data.y);
+
+    // Get face mesh positions for eye lines
     try {
-      const keypoints = face.keypoints;
-      
-      // Eye landmarks
-      const leftEyeIndices = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
-      const rightEyeIndices = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398];
-      
-      const leftEyeCenter = this.getEyeCenter(keypoints, leftEyeIndices);
-      const rightEyeCenter = this.getEyeCenter(keypoints, rightEyeIndices);
-      
-      const gazeVector = this.calculateGazeVector(leftEyeCenter, rightEyeCenter, keypoints);
+      const fmPositions = await webgazer.getTracker().getPositions();
+      if (fmPositions) {
+        const whr = webgazer.getVideoPreviewToCameraResolutionRatio();
+        const previewWidth = webgazer.params.videoViewerWidth || 240;
 
-      // Apply calibration transformation
-      if (this.calibrationData.length >= 9) {
-        return this.applyProfessionalCalibration(gazeVector);
+        const leftEye = fmPositions[145];
+        const rightEye = fmPositions[374];
+
+        if (leftEye && rightEye) {
+          const leftX = previewWidth - leftEye[0] * whr[0];
+          const leftY = leftEye[1] * whr[1];
+          const rightX = previewWidth - rightEye[0] * whr[0];
+          const rightY = rightEye[1] * whr[1];
+
+          d3.select('#eyeline1')
+            .attr('x1', data.x)
+            .attr('y1', data.y)
+            .attr('x2', leftX)
+            .attr('y2', leftY);
+
+          d3.select('#eyeline2')
+            .attr('x1', data.x)
+            .attr('y1', data.y)
+            .attr('x2', rightX)
+            .attr('y2', rightY);
+        }
       }
-
-      // Basic mapping
-      return {
-        x: Math.max(0, Math.min(window.innerWidth, window.innerWidth * (0.5 + gazeVector.x * 1.2))),
-        y: Math.max(0, Math.min(window.innerHeight, window.innerHeight * (0.5 + gazeVector.y * 1.2)))
-      };
-    } catch (error) {
-      return null;
-    }
-  }
-
-  getEyeCenter(keypoints, indices) {
-    let x = 0, y = 0;
-    for (const idx of indices) {
-      if (keypoints[idx]) {
-        x += keypoints[idx].x;
-        y += keypoints[idx].y;
-      }
-    }
-    return { x: x / indices.length, y: y / indices.length };
-  }
-
-  calculateGazeVector(leftEye, rightEye, keypoints) {
-    const eyeCenter = {
-      x: (leftEye.x + rightEye.x) / 2,
-      y: (leftEye.y + rightEye.y) / 2
-    };
-
-    const noseTip = keypoints[1];
-    const leftCheek = keypoints[234];
-    const rightCheek = keypoints[454];
-    const forehead = keypoints[9];
-    const chin = keypoints[175];
-
-    if (!noseTip || !leftCheek || !rightCheek || !forehead || !chin) {
-      return { x: 0, y: 0 };
+    } catch (e) {
+      // Ignore errors in eye line calculation
     }
 
-    const faceCenter = {
-      x: (leftCheek.x + rightCheek.x) / 2,
-      y: (forehead.y + chin.y) / 2
-    };
-
-    const faceWidth = Math.abs(rightCheek.x - leftCheek.x);
-    const faceHeight = Math.abs(chin.y - forehead.y);
-
-    return {
-      x: (eyeCenter.x - faceCenter.x) / (faceWidth / 3),
-      y: (eyeCenter.y - faceCenter.y) / (faceHeight / 3)
-    };
-  }
-
-  applyProfessionalCalibration(gazeVector) {
-    // Use bilinear interpolation for accurate mapping
-    let closestPoints = this.calibrationData
-      .map(point => ({
-        ...point,
-        distance: Math.sqrt(
-          Math.pow(gazeVector.x - point.gazeVector.x, 2) +
-          Math.pow(gazeVector.y - point.gazeVector.y, 2)
-        )
-      }))
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, 4);
-
-    if (closestPoints.length === 0) return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-
-    // Weighted average based on inverse distance
-    let totalWeight = 0;
-    let weightedX = 0;
-    let weightedY = 0;
-
-    for (const point of closestPoints) {
-      const weight = point.distance > 0 ? 1 / (point.distance + 0.001) : 1000;
-      totalWeight += weight;
-      weightedX += point.screenPoint.x * weight;
-      weightedY += point.screenPoint.y * weight;
-    }
-
-    return {
-      x: Math.max(0, Math.min(window.innerWidth, weightedX / totalWeight)),
-      y: Math.max(0, Math.min(window.innerHeight, weightedY / totalWeight))
-    };
+    // Process gaze data
+    this.processGazeData(data);
   }
 
   processGazeData(gaze) {
+    // Simple smoothing
     if (this.smoothedGaze.x === 0 && this.smoothedGaze.y === 0) {
       this.smoothedGaze = { x: gaze.x, y: gaze.y };
     } else {
-      const distance = Math.sqrt(
-        Math.pow(gaze.x - this.smoothedGaze.x, 2) + 
-        Math.pow(gaze.y - this.smoothedGaze.y, 2)
-      );
-      
-      const factor = distance > 50 ? 0.6 : 0.2;
-      
+      const factor = 0.3;
       this.smoothedGaze.x = factor * gaze.x + (1 - factor) * this.smoothedGaze.x;
       this.smoothedGaze.y = factor * gaze.y + (1 - factor) * this.smoothedGaze.y;
     }
 
+    // Update gaze indicator
     this.updateGazeIndicator();
 
+    // Notify exercise system
     if (window.exerciseSystem) {
       window.exerciseSystem.onGazeUpdate(this.smoothedGaze);
     }
@@ -234,7 +256,7 @@ class EyeTracker {
 
   updateGazeIndicator() {
     const indicator = document.getElementById('gazeIndicator');
-    if (indicator && this.smoothedGaze.x > 0 && this.smoothedGaze.y > 0) {
+    if (indicator) {
       indicator.style.left = this.smoothedGaze.x + 'px';
       indicator.style.top = this.smoothedGaze.y + 'px';
       indicator.style.display = 'block';
@@ -252,9 +274,8 @@ class EyeTracker {
       
       overlay.style.display = 'block';
       grid.innerHTML = '';
-      this.calibrationData = [];
       
-      title.textContent = 'Calibración Profesional';
+      title.textContent = 'Calibración WebGazer';
       instructions.textContent = 'Haz clic en cada punto azul y mira fijamente durante 2 segundos.';
       
       const points = [
@@ -285,38 +306,14 @@ class EyeTracker {
           element.classList.add('active');
           status.textContent = `Calibrando punto ${currentPoint + 1}... mantén la mirada fija`;
           
-          // Collect samples for 2 seconds
-          const samples = [];
-          const startTime = performance.now();
-          
-          while (performance.now() - startTime < 2000) {
-            if (this.smoothedGaze.x > 0) {
-              samples.push({
-                x: this.smoothedGaze.x,
-                y: this.smoothedGaze.y
-              });
-            }
-            await new Promise(r => setTimeout(r, 50));
-          }
-
-          if (samples.length > 10) {
-            // Remove outliers and calculate average
-            const sortedX = samples.map(s => s.x).sort((a,b) => a-b);
-            const sortedY = samples.map(s => s.y).sort((a,b) => a-b);
-            const trim = Math.floor(samples.length * 0.1);
-            const avgX = sortedX.slice(trim, -trim).reduce((a,b) => a+b, 0) / (sortedX.length - 2*trim);
-            const avgY = sortedY.slice(trim, -trim).reduce((a,b) => a+b, 0) / (sortedY.length - 2*trim);
-
-            this.calibrationData.push({
-              screenPoint: {
-                x: point[0] * window.innerWidth,
-                y: point[1] * window.innerHeight
-              },
-              gazeVector: {
-                x: (avgX / window.innerWidth - 0.5) * 2,
-                y: (avgY / window.innerHeight - 0.5) * 2
-              }
-            });
+          // Record calibration point multiple times
+          for (let i = 0; i < 5; i++) {
+            webgazer.recordScreenPosition(
+              point[0] * window.innerWidth, 
+              point[1] * window.innerHeight, 
+              'click'
+            );
+            await new Promise(r => setTimeout(r, 200));
           }
 
           element.remove();
@@ -347,7 +344,6 @@ class EyeTracker {
     grid.innerHTML = '';
     this.precisionData = [];
     
-    // Test points (different from calibration points)
     const testPoints = [
       [0.2, 0.2], [0.8, 0.2], [0.2, 0.8], [0.8, 0.8], [0.5, 0.5]
     ];
@@ -369,11 +365,9 @@ class EyeTracker {
       const startTime = performance.now();
       
       while (performance.now() - startTime < 3000) {
-        if (this.smoothedGaze.x > 0) {
-          samples.push({
-            x: this.smoothedGaze.x,
-            y: this.smoothedGaze.y
-          });
+        const pred = await webgazer.getCurrentPrediction();
+        if (pred) {
+          samples.push({ x: pred.x, y: pred.y });
         }
         await new Promise(r => setTimeout(r, 50));
       }
@@ -382,7 +376,6 @@ class EyeTracker {
         const targetX = point[0] * window.innerWidth;
         const targetY = point[1] * window.innerHeight;
         
-        // Calculate precision (average distance from target)
         const distances = samples.map(sample => 
           Math.sqrt(Math.pow(sample.x - targetX, 2) + Math.pow(sample.y - targetY, 2))
         );
@@ -403,39 +396,33 @@ class EyeTracker {
     const resultsDiv = document.getElementById('precisionResults');
     const avgPrecisionSpan = document.getElementById('avgPrecision');
     
-    // Calculate average precision
     const avgPrecision = this.precisionData.reduce((a, b) => a + b, 0) / this.precisionData.length;
     this.currentPrecision = avgPrecision;
     
-    // Show results
     status.style.display = 'none';
     resultsDiv.style.display = 'block';
     avgPrecisionSpan.textContent = Math.round(avgPrecision) + ' px';
     
-    // Color code precision
     if (avgPrecision < 50) {
-      avgPrecisionSpan.style.color = '#4CAF50'; // Green - Excellent
+      avgPrecisionSpan.style.color = '#4CAF50';
     } else if (avgPrecision < 100) {
-      avgPrecisionSpan.style.color = '#FF9800'; // Orange - Good
+      avgPrecisionSpan.style.color = '#FF9800';
     } else {
-      avgPrecisionSpan.style.color = '#f44336'; // Red - Poor
+      avgPrecisionSpan.style.color = '#f44336';
     }
     
-    // Setup buttons
-    document.getElementById('btnAcceptCalibration').onclick = () => {
-      this.acceptCalibration(resolve);
-    };
+    // Setup button handlers
+    const acceptBtn = document.getElementById('btnAcceptCalibration');
+    const recalibrateBtn = document.getElementById('btnRecalibrate');
     
-    document.getElementById('btnRecalibrate').onclick = () => {
-      this.recalibrate(resolve);
-    };
+    acceptBtn.onclick = () => this.acceptCalibration(resolve);
+    recalibrateBtn.onclick = () => this.recalibrate(resolve);
   }
 
   acceptCalibration(resolve) {
     const overlay = document.getElementById('calibrationOverlay');
     overlay.style.display = 'none';
     
-    // Update UI status
     document.getElementById('calibrationState').textContent = 'Calibrado';
     document.getElementById('currentPrecision').textContent = Math.round(this.currentPrecision) + ' px';
     
@@ -444,8 +431,6 @@ class EyeTracker {
   }
 
   recalibrate(resolve) {
-    // Reset and start over
-    this.calibrationData = [];
     this.precisionData = [];
     this.currentPrecision = null;
     
@@ -460,18 +445,18 @@ class EyeTracker {
   }
 
   togglePreview() {
-    // Camera stays visible
+    const current = webgazer.params.showVideoPreview;
+    webgazer.showVideoPreview(!current);
   }
 
   destroy() {
     this.isRunning = false;
-    if (this.video && this.video.srcObject) {
-      const tracks = this.video.srcObject.getTracks();
-      tracks.forEach(track => track.stop());
+    if (this.isInitialized) {
+      webgazer.end();
+      this.isInitialized = false;
     }
-    if (this.video && this.video.parentNode) {
-      this.video.parentNode.removeChild(this.video);
-    }
-    this.isInitialized = false;
+    
+    // Remove collision SVG
+    d3.select('#collisionSVG').remove();
   }
 }
