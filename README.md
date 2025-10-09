@@ -6,7 +6,7 @@ Desarrollado por [**Mario Bustillo**](https://www.linkedin.com/in/mario-bustillo
 
 ## Descripción
 
-El Reflejo Vestíbulo-Ocular (VOR) es un mecanismo neurológico que estabiliza la mirada durante movimientos de cabeza, permitiendo mantener la fijación visual en un objetivo. Este sistema proporciona un entorno de entrenamiento progresivo con 5 niveles de dificultad y análisis de métricas en tiempo real.
+El Reflejo Vestíbulo-Ocular (VOR) es un mecanismo neurológico que estabiliza la mirada durante movimientos de cabeza, permitiendo mantener la fijación visual en un objetivo. Este sistema proporciona un entorno de entrenamiento progresivo con 5 niveles de dificultad y análisis de métricas en tiempo real. 
 
 ## Características Principales
 
@@ -40,7 +40,7 @@ VOR-eye-tracking/
 
 ### Tecnologías Utilizadas
 
-- **WebGazer.js**: Biblioteca de eye tracking basada en TensorFlow.js
+- **EyeGestures**: Biblioteca de eye tracking moderna y eficiente
 - **Web Audio API**: Efectos sonoros y retroalimentación
 - **Canvas API**: Visualización de datos de mirada
 - **LocalForage**: Almacenamiento local de configuraciones
@@ -48,27 +48,27 @@ VOR-eye-tracking/
 
 ## Funcionamiento del Eye Tracking
 
-### WebGazer.js
+### EyeGestures
 
-WebGazer.js utiliza la cámara web del usuario para realizar seguimiento ocular sin hardware especializado:
+EyeGestures utiliza la cámara web del usuario para realizar seguimiento ocular sin hardware especializado:
 
 #### 1. Detección Facial
-- **TensorFlow.js**: Detecta puntos faciales clave
+- **Algoritmos avanzados**: Detecta puntos faciales clave
 - **MediaPipe**: Identifica landmarks oculares específicos
-- **68 puntos faciales**: Mapeo detallado de características
+- **468 puntos faciales**: Mapeo detallado de características
 
 #### 2. Estimación de Mirada
-- **Regresión Ridge**: Algoritmo de aprendizaje automático
+- **Algoritmos de ML**: Aprendizaje automático optimizado
 - **Calibración**: Mapeo entre posición ocular y coordenadas de pantalla
-- **Filtro Kalman**: Suavizado de predicciones
+- **Suavizado**: Filtrado de predicciones
 
 #### 3. Proceso de Calibración
 ```javascript
 // Registro de posición durante calibración
-webgazer.recordScreenPosition(targetX, targetY);
+await eyeGestures.addCalibrationPoint(targetX, targetY);
 
 // Obtención de predicción
-const prediction = await webgazer.getCurrentPrediction();
+const prediction = eyeGestures.getGazePrediction();
 // Retorna: { x: number, y: number }
 ```
 
